@@ -6,9 +6,10 @@ For more details about openXsensor in general, please visit the project page at 
 ### New functions are:
 
 * Select between GAM and EAM as Sensor Type
-* Added support for HoTT Text-Menue 
-* Edit values for current offset and current scale (mA/V) in HoTT Text-Menue
-* Edit values for voltage scale (mV/V) in HoTT Text-Menue
+* Added support for HoTT Text-Menu 
+* Edit values for current offset and current scale (mA/V) in HoTT Text-Menu
+* Edit values for voltage scale (mV/V) in HoTT Text-Menu
+
 
 ### Limitations:
 TBA
