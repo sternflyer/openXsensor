@@ -1,3 +1,8 @@
+## OpenXsensor with extended HoTT functionalities
+
+This poject is forked from the original openXsensor project
+For more details about openXsensor in general, please visit the project page at https://github.com/openXsensor/openXsensor.
+
 ## OpenXsensor New Home
 _from may 2015_
 
