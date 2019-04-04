@@ -12,4 +12,4 @@ For more details about openXsensor in general, please visit the project page at 
 
 
 ### Limitations:
-TBA
+* Values for voltage scale (mV/V) in HoTT Text-Menu only apply to VOLT_1
