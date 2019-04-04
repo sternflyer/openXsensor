@@ -48,7 +48,6 @@ class OXS_VOLTAGE {
 	void setupVoltage( void );
 	void readSensor();
 	void resetValues();
-  void convertNtcVoltToTemp (int32_t &voltage ) ;
     
   private:
 #ifdef DEBUG  

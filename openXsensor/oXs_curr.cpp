@@ -4,6 +4,11 @@
 //#define DEBUGCURRENT
 #endif
 
+#ifdef HOTT_TEXT
+	#include "hott_eeprom.h"	//Need the struct
+	HOTT_EEPROM current_coef;
+#endif
+
 extern unsigned long micros( void ) ;
 extern unsigned long millis( void ) ;
 extern void delay(unsigned long ms) ;
@@ -54,9 +59,7 @@ void OXS_CURRENT::setupCurrent( ) {
   if ( RESISTOR_TO_GROUND_FOR_CURRENT > 0 && RESISTOR_TO_CURRENT_SENSOR > 0) {
     currentDivider = 1.0 * (RESISTOR_TO_GROUND_FOR_CURRENT + RESISTOR_TO_CURRENT_SENSOR ) / RESISTOR_TO_GROUND_FOR_CURRENT ;
   }
-#endif 
-  offsetCurrentSteps =  1023.0 * MVOLT_AT_ZERO_AMP / tempRef / currentDivider;
-  mAmpPerStep =  currentDivider * tempRef / MVOLT_PER_AMP / 1.023 ; 
+#endif
 
   currentData.milliAmps.available = false;
   currentData.consumedMilliAmps.available = false;
@@ -79,8 +82,12 @@ void OXS_CURRENT::setupCurrent( ) {
 
 
 // **************** Read the Current sensor *********************
-#if defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES)
+#ifdef PIN_CURRENTSENSOR
 void OXS_CURRENT::readSensor() {
+  #ifdef HOTT_TEXT																					//Values might have been changed in between
+    offsetCurrentSteps =  1023.0 * (current_coef.get_current_offset()) / REFERENCE_VOLTAGE;
+    mAmpPerStep =  REFERENCE_VOLTAGE / (current_coef.get_current_coef()) / 1.023; 
+  #endif
   static int cnt = 0;
 //  static int cntMAmp =0;
   static unsigned long lastCurrentMillis = millis() ; 
@@ -104,7 +111,7 @@ void OXS_CURRENT::readSensor() {
   sumCurrent += analogRead(_pinCurrent) ; 
   cnt++ ;
   milliTmp = millis() ;
-  if(  ( milliTmp - lastCurrentMillis) > 200 ) {   // calculate average once per 200 millisec
+  if(  milliTmp > ( lastCurrentMillis + 200) ){   // calculate average once per 200 millisec
       currentData.milliAmps.value = ((sumCurrent / cnt) - offsetCurrentSteps ) * mAmpPerStep ;
 //      if (currentData.milliAmps.value < 0) currentData.milliAmps.value = 0 ;
 	  currentData.milliAmps.available = true ;

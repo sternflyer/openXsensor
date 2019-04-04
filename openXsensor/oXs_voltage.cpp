@@ -1,14 +1,18 @@
 #include "oXs_voltage.h"
- 
+
+#ifdef HOTT_TEXT
+	#include "hott_eeprom.h"	//Need the struct
+	HOTT_EEPROM volt_coef;
+#endif
+
 #ifdef DEBUG
-//#define DEBUGNEWVALUE
+#define DEBUGNEWVALUE
 //#define DEBUGDELAY
 //#define DEBUGCELLCALCULATION
 //#define DEBUGLOWVOLTAGE
-//#define DEBUGNTC
 #endif
 
-#if defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES)
+#ifdef PIN_VOLTAGE
 
 extern unsigned long micros( void ) ;
 extern unsigned long millis( void ) ;
@@ -28,6 +32,9 @@ OXS_VOLTAGE::OXS_VOLTAGE(uint8_t x)
 
 // **************** Setup the Current sensor *********************
 void OXS_VOLTAGE::setupVoltage( void ) {
+#ifdef HOTT_TEXT
+  volt_coef.read_eeprom();
+#endif
   uint16_t tempRef ;
 #ifdef DEBUG  
   printer->println("Enter setup voltage");
@@ -92,7 +99,7 @@ void OXS_VOLTAGE::setupVoltage( void ) {
   for (int cntInit = 0 ; cntInit < 6 ; cntInit++) {
     if ( tempPin[ cntInit ] < 8 ) {
       voltageData.mVoltPin[cntInit] =  tempPin[ cntInit ] ;
-      // pinMode(voltageData.mVoltPin[cntInit],INPUT);  // this instruction was wrong because pinMode need A0... A7 for analog pin - and not 0...7
+      pinMode(voltageData.mVoltPin[cntInit],INPUT);
       voltageData.atLeastOneVolt = true ;
     } else {
       voltageData.mVoltPin[cntInit] = 8 ;
@@ -101,6 +108,9 @@ void OXS_VOLTAGE::setupVoltage( void ) {
     if ( tempResistorToGround[cntInit] > 0 && tempResistorToVoltage[cntInit] > 0 && tempScaleVoltage[cntInit] > 0 ) {
       voltageData.mVoltPerStep[cntInit] = tempRef / 1023.0 * ( tempResistorToGround[cntInit] + tempResistorToVoltage[cntInit] ) / tempResistorToGround[cntInit]  * tempScaleVoltage[cntInit];
     } else {
+	  #ifdef HOTT_TEXT
+		tempScaleVoltage[0] = 1 / (volt_coef.get_voltage_coef() / 1000.0f);
+	  #endif
       voltageData.mVoltPerStep[cntInit] = tempRef / 1023.0  * tempScaleVoltage[cntInit];  
     }
     voltageData.sumVoltage[cntInit] = 0 ;
@@ -123,6 +133,11 @@ void OXS_VOLTAGE::setupVoltage( void ) {
   static byte voltageNr = 0;
 
 void OXS_VOLTAGE::readSensor() {
+	
+#ifdef HOTT_TEXT
+	//tempScaleVoltage[0] = 1 / (volt_coef.get_voltage_coef() / 1000.0f);
+	voltageData.mVoltPerStep[0] = REFERENCE_VOLTAGE / 1023.0  * (1 / (volt_coef.get_voltage_coef() / 1000.0f));
+#endif
 
     if (voltageData.atLeastOneVolt) { // no calculation if there is no voltage to calculate.
 #ifdef DEBUGDELAY
@@ -161,7 +176,7 @@ void OXS_VOLTAGE::voltageNrIncrease() {
       voltageNr = 0 ;
       cnt++;
       if(millis() > ( lastVoltMillis + 500) ){   // calculate average only once every 500 msec 
-        for (uint8_t cntVolt = 0 ; cntVolt < 6 ; cntVolt++) {      
+        for (int cntVolt = 0 ; cntVolt < 6 ; cntVolt++) {      
           if ( voltageData.mVoltPin[cntVolt] < 8) {
             voltageData.mVolt[cntVolt].value = round( ((float) voltageData.sumVoltage[cntVolt]  * voltageData.mVoltPerStep[cntVolt] ) / (float) cnt  ) + voltageData.offset[cntVolt];
 //            voltageData.mVolt[cntVolt].value = (voltageData.sumVoltage[cntVolt] / cnt  * voltageData.mVoltPerStep[cntVolt] ) + voltageData.offset[cntVolt];
@@ -249,32 +264,6 @@ void OXS_VOLTAGE::voltageNrIncrease() {
         }
 #endif // Enf of Frsky protocols
 #endif // ( NUMBEROFCELLS ) && (NUMBEROFCELLS > 0)
-
-#if defined  ( FIRST_NTC_ON_VOLT_NR ) && defined ( LAST_NTC_ON_VOLT_NR ) && ( FIRST_NTC_ON_VOLT_NR <= 6 ) && ( LAST_NTC_ON_VOLT_NR <= 6) &&  ( FIRST_NTC_ON_VOLT_NR >= 1 ) && ( LAST_NTC_ON_VOLT_NR >= 1 ) && ( FIRST_NTC_ON_VOLT_NR <= LAST_NTC_ON_VOLT_NR )
-        uint8_t numberOfNtc = LAST_NTC_ON_VOLT_NR - FIRST_NTC_ON_VOLT_NR + 1;
-        uint8_t minNtcIdx ;
-        uint8_t maxNtcIdx ;
-        int32_t minTemp = 99999999 ;
-        int32_t maxTemp = 0 ;
-        
-       for ( uint8_t iNtc = FIRST_NTC_ON_VOLT_NR - 1 ; iNtc <= LAST_NTC_ON_VOLT_NR - 1 ; iNtc++ ) {
-          convertNtcVoltToTemp( voltageData.mVolt[iNtc].value ) ;
-          if (voltageData.mVolt[iNtc].value < minTemp ) {
-            minTemp = voltageData.mVolt[iNtc].value ;
-            minNtcIdx = iNtc + 1 ; 
-          }
-          if (voltageData.mVolt[iNtc].value > maxTemp ) {
-            maxTemp = voltageData.mVolt[iNtc].value ;
-            maxNtcIdx = iNtc + 1 ;
-          }
-        }  // end for   
-        if ( numberOfNtc  > 2) {
-          voltageData.mVolt[FIRST_NTC_ON_VOLT_NR - 1].value =  minTemp ;
-          voltageData.mVolt[FIRST_NTC_ON_VOLT_NR ].value =  maxNtcIdx ;
-          voltageData.mVolt[LAST_NTC_ON_VOLT_NR - 1].value =  maxTemp ; 
-        }        
-#endif  // end of NTC calculations
-
         cnt=0;
         lastVoltMillis = millis() ;
 #ifdef SEQUENCE_OUTPUTS
@@ -355,49 +344,5 @@ uint32_t OXS_VOLTAGE::calculateCell(int32_t V0 , int32_t V1 , int32_t V2 , uint8
   return (cell_2 << 20) | (cell_1 << 8) | ( ( (int32_t) voltageData.maxNumberOfCells )<<4 ) | (int32_t) cellId ;
 }
 #endif // end calculateCell
-
-
-#if defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) && defined ( PIN_VOLTAGE ) && defined ( FIRST_NTC_ON_VOLT_NR )
-void  OXS_VOLTAGE::convertNtcVoltToTemp (int32_t &voltage ) {     //Calculate temperature using the Beta Factor equation
-        // Convert the thermal stress value to resistance
-        // we reuse here the mVolt calculated by oXs. The config must be adapted in a such a way that this mVolt is equal to the raw value returned by the ADC * 1000 (for better accuracy)
-        // therefore, the mVoltPerStep calculated must be equal to 1000 and so :
-        // USE_INTERNAL_REFERENCE must be as comment (so with // in front off)
-        // USE_EXTERNAL_REFERENCE must be as comment (so with // in front off)
-        // REFERENCE_VOLTAGE must be as comment (so with // in front off)
-        // PIN_VOLTAGE must be defined and the analog pin used for NTC must be specified in one of the 6 index        
-        //  RESISTOR_TO_GROUND must be set on 0 (for the index being used)
-        //  OFFSET_VOLTAGE must (normally) be set on 0 (for the index being used)
-        //  SCALE_VOLTAGE  must be set on 204.6 (=1000 * 1023/5000) (for the index being used)
-        // The calculated temperature is filled back in the voltage field
-        // If there are more than 2 NTC, voltage from FIRST_NTC is filled with the lowest temp, voltage from LAST_NTC is filled with highest temp and voltage from FIRST_NTC+1 is filled with the index of the highest temp
-#if defined( DEBUG) && defined (DEBUGNTC)
-         Serial.print( "Voltage= " ) ; Serial.print( voltage );
-#endif
-        
-        float media =  SERIE_RESISTOR /  ( (1023000.0 / voltage ) - 1 ) ;
-/*        
-        float temperatura = media / TERMISTOR_NOMINAL;     // (R/Ro)
-        temperatura = log(temperatura); // ln(R/Ro)
-        temperatura /= B_COEFFICIENT;                   // 1/B * ln(R/Ro)
-        temperatura += 1.0 / (TEMPERATURE_NOMINAL + 273.15); // + (1/To)
-        temperatura = 1.0 / temperatura ;                 // Invert the value
-        temperatura -= 273.15 ;                         // Convert it to Celsius
-        voltage = temperatura ;
-*/                
-        // T = 1/(A + B* ln(R) + C * ln(R) *ln(R) *ln(R)) 
-        float steinhart = log(media) ;
-        steinhart = 1 / ( STEINHART_A + STEINHART_B * steinhart + STEINHART_C * steinhart * steinhart * steinhart) ;
-        steinhart -= 273.15 ;
-        voltage = steinhart ;    
-
-#if defined( DEBUG) && defined (DEBUGNTC)
-         Serial.print( "Temp= " ) ; Serial.println( voltage );
-#endif
-              
-    }  // end convertNtcVoltToTemp 
-#endif
-
-
 
 #endif // end of PIN_VOLTAGE
