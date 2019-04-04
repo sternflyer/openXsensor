@@ -14,6 +14,10 @@
 #ifdef HOTT_TEXT
 	#include "hott_eeprom.h"	//Need the struct
 	HOTT_EEPROM hott_eeprom_rw;
+	static volatile int8_t hott_line_edit = -1;
+	static volatile int8_t hott_line_select = 1;
+	static volatile int8_t hott_page = 1; 
+	static volatile	int8_t sensor_type = hott_eeprom_rw.get_sensor_type();
 #endif
 
 extern OXS_MS5611 oXs_MS5611 ;
@@ -58,9 +62,7 @@ static uint8_t delayTxPendingCount ;             // Used to register the number 
 volatile uint8_t ppmInterrupted ; // This flag is activated at the end of handling interrupt on Timer 1 Compare A if during this interrupt handling an interrupt on pin change (INT0 or INT1) occurs
                          // in this case, ppm will be wrong and has to be discarded 
 
-static volatile int8_t hott_line_edit = -1;
-static volatile int8_t hott_line_select = 1;
-static volatile int8_t hott_page = 1;       						 
+      						 
 
 static uint8_t convertGpsFix[5] = {0x2d , 0x2d , 0x32 , 0x33 , 0x44 } ; 
 
@@ -439,9 +441,9 @@ void OXS_OUT::sendData() {
 								}									
 								
 								if ((hott_button == HOTTV4_BUTTON_INC) && (hott_line_edit == 1)){
-									hott_eeprom_rw.write_protocol(min(HOTT_TELEMETRY_EAM_SENSOR_ID, (hott_eeprom_rw.get_protocol() + 1)));										
+									hott_eeprom_rw.write_sensor_type(min(HOTT_TELEMETRY_EAM_SENSOR_ID, (hott_eeprom_rw.get_sensor_type() + 1)));										
 								} else if ((hott_button == HOTTV4_BUTTON_DEC) && (hott_line_edit == 1)){
-									hott_eeprom_rw.write_protocol(max(HOTT_TELEMETRY_GAM_SENSOR_ID, (hott_eeprom_rw.get_protocol() - 1)));										
+									hott_eeprom_rw.write_sensor_type(max(HOTT_TELEMETRY_GAM_SENSOR_ID, (hott_eeprom_rw.get_sensor_type() - 1)));										
 								} else if ((hott_button == HOTTV4_BUTTON_SET) && (hott_line_edit == 1)){
 									hott_line_edit = -1;
 									hott_eeprom_rw.write_eeprom();
@@ -537,11 +539,11 @@ void OXS_OUT::sendData() {
 								TxHottData.txtMsg.text[1][11] = 'p';
 								TxHottData.txtMsg.text[1][12] = 'e';
 								TxHottData.txtMsg.text[1][13] = ':';
-								if (hott_eeprom_rw.get_protocol() == HOTT_TELEMETRY_GAM_SENSOR_ID){
+								if (hott_eeprom_rw.get_sensor_type() == HOTT_TELEMETRY_GAM_SENSOR_ID){
 									TxHottData.txtMsg.text[1][15] = 'G';
 									TxHottData.txtMsg.text[1][16] = 'A';
 									TxHottData.txtMsg.text[1][17] = 'M';
-								} else if (hott_eeprom_rw.get_protocol() == HOTT_TELEMETRY_EAM_SENSOR_ID){
+								} else if (hott_eeprom_rw.get_sensor_type() == HOTT_TELEMETRY_EAM_SENSOR_ID){
 									TxHottData.txtMsg.text[1][15] = 'E';
 									TxHottData.txtMsg.text[1][16] = 'A';
 									TxHottData.txtMsg.text[1][17] = 'M';
@@ -1082,13 +1084,6 @@ ISR(TIMER1_COMPA_vect)
                   if( !(GET_RX_PIN( ) == 0 )) data |= 0x80 ;  // If a logical 1 is read, let the data mirror this.
                   SwUartRXData = data ;
                } else {                                       //Done receiving =  8 bits are in SwUartRXData
-					/*#ifdef DEBUG 
-						Serial.print(HOTT_SENSOR_TEXT, HEX);
-						Serial.print("");
-						Serial.print(LastRx, HEX);
-						Serial.print(", ");
-						Serial.println(SwUartRXData, HEX);
-					#endif*/
                   if ( ( LastRx == HOTT_BINARY_MODE_REQUEST_ID ) && ( ( SwUartRXData == HOTT_SENSOR)    // if the previous byte identifies a polling for a reply in binary format and current is oXs sensor ID
 #ifdef GPS_INSTALLED                           
                               || (  SwUartRXData == HOTT_TELEMETRY_GPS_SENSOR_ID ) 
@@ -1138,27 +1133,6 @@ ISR(TIMER1_COMPA_vect)
             }    
             break ;
 			
-/*#ifdef HOTT_TEXT
-	  case Tx_TXT_PENDING :                                         //End of delay before sending data has occurs
-            if ( delayTxPendingCount ) {                       // if additional delay is requested, perform it      
-                delayTxPendingCount--;
-                OCR1A += DELAY_1000 ; 
-            } else {
-                if ( flagUpdateHottBuffer ) {                     // it is expected that the main loop will update the buffer and set this flag to true within the delay
-                    OCR1A += DELAY_1000 ;                          // if it is not yet done, stay Tx_TXT_PENDING for 1 msec more
-//                    state = WAITING ;
-                } else {
-                    CLEAR_TX_PIN_MB() ;                                // Send a start bit (logic 0 on the TX_PIN).
-                    OCR1A = TCNT1 + TICKS2WAITONEHOTT  - INTERRUPT_ENTRY_TRANSMIT ;                // Count one period into the future (less due to time to enter ISR)
-                    SwUartTXBitCount = 0 ;
-                    SwUartTXData = TxHottData.txBuffer[0] ;
-                    TxCount = 0 ;
-                    state = TRANSMIT ;
-                }
-            }    
-            break ;
-#endif*/
-
     case WAITING :                                  // At the end of wait time, stop timer interrupt but allow pin change interrupt in order to allow to detect incoming data
            DISABLE_TIMER_INTERRUPT() ;              // Stop the timer interrupts.
            state = IDLE ;                           // Go back to idle.

@@ -20,11 +20,11 @@ class HOTT_EEPROM{
 	float get_voltage_coef();
 	float get_current_coef();
 	int get_current_offset();
-	byte get_protocol();
+	byte get_sensor_type();
 	void write_voltage_coef(float new_voltage_coef);
 	void write_current_coef(float new_current_coef);
 	void write_current_offset(int new_current_offset);
-	void write_protocol(byte new_protocol);
+	void write_sensor_type(byte new_sensor_type);
 	
 	private:
 	
