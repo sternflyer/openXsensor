@@ -73,7 +73,7 @@ struct t_mbAllData {
 #define SERIAL_COM_SPEED    19200
 
 // Hott protocol v4 delay
-#define HOTTV4_TX_DELAY 1600 // Delai entre octets
+#define HOTTV4_TX_DELAY 1600 // Dela entre octets
 
 // first byte sent by Rx for polling can have 2 values
 #define HOTT_BINARY_MODE_REQUEST_ID      0x80
@@ -81,10 +81,10 @@ struct t_mbAllData {
 
 // in binary mode, second byte identifies one of 4 sensor types
 #define HOTT_TELEMETRY_VARIO_SENSOR_ID  0x89 //Graupner #33601 Vario Module
-#define HOTT_TELEMETRY_GPS_SENSOR_ID    0x8a //Graupner #33600 Gps module
-#define HOTTV4_ESC_SENSOR_ID                 0x8C
-#define HOTT_TELEMETRY_GAM_SENSOR_ID    0x8d // General Air Module ID 
-#define HOTT_TELEMETRY_GEA_SENSOR_ID    0x8E // Electric Air Module ID
+#define HOTT_TELEMETRY_GPS_SENSOR_ID    0x8A //Graupner #33600 Gps module
+#define HOTTV4_ESC_SENSOR_ID            0x8C
+#define HOTT_TELEMETRY_GAM_SENSOR_ID    0x8D // General Air Module ID 
+#define HOTT_TELEMETRY_EAM_SENSOR_ID    0x8E // Electric Air Module ID
 // note : when sensor relies, it sent first 2 bytes with the value = ??????????????? and then it starts a set of bytes depending on the type of sensor.
 
 
@@ -93,21 +93,31 @@ struct t_mbAllData {
 
 #define HOTTV4_VARIO_SENSOR_TEXT_ID          0x90   // Vario Module Text ID
 #define HOTTV4_GPS_SENSOR_TEXT_ID            0xA0   // GPS Module Text ID
-#define HOTTV4_ESC_SENSOR_TEXT_ID            0xC0
-#define HOTTV4_GENERAL_AIR_SENSOR_TEXT_ID    0xD0
-#define HOTTV4_ELECTRICAL_AIR_SENSOR_TEXT_ID 0xE0   // Electric Air Module Text ID
+#define HOTTV4_ESC_SENSOR_TEXT_ID            0xC0	// ESC Text ID
+#define HOTTV4_GAM_SENSOR_TEXT_ID    		 0xD0	// General Air Module Text ID
+#define HOTTV4_EAM_SENSOR_TEXT_ID 			 0xE0   // Electric Air Module Text ID
 
-
-#define HOTTV4_BUTTON_PREV                   0x07
+#define HOTTV4_BUTTON_ESC                    0x07
 #define HOTTV4_BUTTON_SET                    0x09
 #define HOTTV4_BUTTON_DEC                    0x0B
 #define HOTTV4_BUTTON_INC                    0x0D
-#define HOTTV4_BUTTON_NEXT                   0x0E
-#define HOTTV4_BUTTON_NIL                    0x0F
+#define HOTTV4_BUTTON_ENT                    0x0E
+
+#define HOTT_PAGES 1 //Number og Pages in Text Mode
 
 
 
-#define TXHOTTDATA_BUFFERSIZE 45
+#ifdef HOTT_TEXT
+	#define TXHOTTDATA_BUFFERSIZE 173
+#else
+	#define TXHOTTDATA_BUFFERSIZE 45
+#endif
+
+#define TXHOTTDATA_BIN_BUFFERSIZE 45
+#define TXHOTTDATA_TEXT_BUFFERSIZE 173
+#define HOTT_TEXTMODE_MSG_LEN 168
+
+
 
 // structure of GENERAL AIR MODULE 
 typedef struct {
@@ -207,7 +217,7 @@ typedef struct {
   byte parity;                          //#45 CHECKSUM CRC/Parity (calculated dynamicaly)
 } HOTT_GAM_MSG ;
 
-//GPS
+// structure of GPS
 typedef struct {
   uint8_t startByte;               /* Byte 1: 0x7C = Start byte data */
   uint8_t sensorID;                /* Byte 2: 0x8A = GPS Sensor */
@@ -259,7 +269,307 @@ typedef struct {
   uint8_t chksum;                  /* Byte 45: Parity Byte */
 } HOTT_GPS_MSG ;
 
+// structure of ELECTRIC AIR MODULE 
+typedef struct {
+  byte start_byte;          //#01 start byte constant value 0x7c
+  byte eam_sensor_id;       //#02 EAM sensor ID. constat value 0x8e=GENRAL ELECTRIC MODULE
+  byte warning_beeps;       //#03 1=A 2=B ... 0x1a=Z  0 = no alarm
+                  /* VOICE OR BIP WARNINGS
+                    Alarme sonore A.. Z, octet correspondant 1 à 26
+                    0x00  00  0  No alarm
+                    0x01  01  A  
+                    0x02  02  B  Negative Difference 2 B
+                    0x03  03  C  Negative Difference 1 C
+                    0x04  04  D  
+                    0x05  05  E  
+                    0x06  06  F  Min. Sensor 1 temp. F
+                    0x07  07  G  Min. Sensor 2 temp. G
+                    0x08  08  H  Max. Sensor 1 temp. H
+                    0x09  09  I  Max. Sensor 2 temp. I
+                    0xA   10  J  Max. Sens. 1 voltage J
+                  0xB   11  K  Max. Sens. 2 voltage K
+                  0xC   12  L  
+                  0xD   13  M  Positive Difference 2 M
+                  0xE   14  N  Positive Difference 1 N
+                  0xF   15  O  Min. Altitude O
+                  0x10  16  P  Min. Power Voltage P    // We use this one for Battery Warning
+                  0x11  17  Q  Min. Cell voltage Q
+                  0x12  18  R  Min. Sens. 1 voltage R
+                  0x13  19  S  Min. Sens. 2 voltage S
+                  0x14  20  T  Minimum RPM T
+                  0x15  21  U  
+                  0x16  22  V  Max. used capacity V
+                  0x17  23  W  Max. Current W
+                  0x18  24  X  Max. Power Voltage X
+                  0x19  25  Y  Maximum RPM Y
+                  0x1A  26  Z  Max. Altitude Z
+                        */
+  byte sensor_id;                       //#04 constant value 0xe0 for EAM, other values for other modules
+  byte alarm_invers1;                   //#05 alarm bitmask. Value is displayed inverted
+              //Bit#  Alarm field
+            // 0    all cell voltage
+            // 1    Battery 1
+            // 2    Battery 2
+            // 3    Temperature 1
+            // 4    Temperature 2
+            // 5    Fuel
+            // 6    mAh
+            // 7    Altitude
+  byte alarm_invers2;                    //#06 alarm bitmask. Value is displayed inverted
+                //Bit#  Alarm Field
+                // 0    main power current
+                // 1    main power voltage
+                // 2    Altitude
+                // 3    m/s                            
+                  // 4    m/3s
+                  // 5    unknown
+                // 6    unknown
+                // 7    "ON" sign/text msg active
+  byte cell_low[7];                     //#7 Volt Cell 1 (in 2 mV increments, 210 == 4.20 V)
+                                        //#8 Volt Cell 2 (in 2 mV increments, 210 == 4.20 V)
+                                        //#9 Volt Cell 3 (in 2 mV increments, 210 == 4.20 V)
+                                        //#10 Volt Cell 4 (in 2 mV increments, 210 == 4.20 V)
+                                        //#11 Volt Cell 5 (in 2 mV increments, 210 == 4.20 V)
+                                        //#12 Volt Cell 6 (in 2 mV increments, 210 == 4.20 V)
+										//#13 Volt Cell 7 (in 2 mV increments, 210 == 4.20 V)
+  byte cell_high[7];                    //#14 Volt Cell 1 (in 2 mV increments, 210 == 4.20 V)
+                                        //#15 Volt Cell 2 (in 2 mV increments, 210 == 4.20 V)
+                                        //#15 Volt Cell 3 (in 2 mV increments, 210 == 4.20 V)
+                                        //#17 Volt Cell 4 (in 2 mV increments, 210 == 4.20 V)
+                                        //#18 Volt Cell 5 (in 2 mV increments, 210 == 4.20 V)
+                                        //#19 Volt Cell 6 (in 2 mV increments, 210 == 4.20 V)
+										//#20 Volt Cell 7 (in 2 mV increments, 210 == 4.20 V)
+  uint16_t  Battery1;                   //#21 LSB battery 1 voltage LSB value. 0.1V steps. 50 = 5.5V only pos. voltages
+                                        //#22 MSB 
+  uint16_t  Battery2;                   //#23 LSB battery 2 voltage LSB value. 0.1V steps. 50 = 5.5V only pos. voltages
+                                        //#24 MSB
+  byte temperature1;                    //#25 Temperature 1. Offset of 20. a value of 20 = 0°C
+  byte temperature2;                    //#26 Temperature 2. Offset of 20. a value of 20 = 0°C
+  uint16_t altitude;                    //#27 altitude in meters. offset of 500, 500 = 0m
+                                        //#28 MSB
+  uint16_t current;                     //#29 current in 0.1A steps 100 == 10,0A
+                                        //#30 MSB current display only goes up to 99.9 A (continuous)									
+  uint16_t main_voltage;                //#31 LSB Main power voltage using 0.1V steps 100 == 10,0V
+                                        //#32 MSB (Appears in GAM display right as alternate display.)
+  uint16_t batt_cap;                    //#33 LSB used battery capacity in 10mAh steps
+                                        //#34 MSB
+  uint16_t climbrate_L;                 //#35 climb rate in 0.01m/s. Value of 30000 = 0.00 m/s
+                                        //#36 MSB
+  byte climbrate3s;                     //#37 climb rate in m/3sec. Value of 120 = 0m/3sec
+  uint16_t rpm;                         //#38 RPM in 10 RPM steps. 300 = 3000rpm
+                                        //#39 MSB
+  byte electric_minutes;				//#40 Time does start, when motor current is > 3 A
+  byte electric_seconds;				//#41 Time does start, when motor current is > 3 A
+  byte speed;							//#42 Speed in km/h in 2mk/h steps (46 = 92 km/h). We are using ground speed here per default
+  byte version;                         //#43 version number (Bytes 35 .43 new but not yet in the record in the display!)
+  byte stop_byte;                       //#44 stop byte 0x7D
+  byte parity;                          //#45 CHECKSUM CRC/Parity (calculated dynamicaly)
+} HOTT_EAM_MSG ;
 
+// structure of VARIO MODULE 
+typedef struct {
+  byte start_byte;          //#01 start byte constant value 0x7c
+  byte vario_sensor_id;       //#02 VARO sensort ID. Constat value 0x89=VARIO
+  byte warning_beeps;       //#03 1=A 2=B ... 0x1a=Z  0 = no alarm
+                  /* VOICE OR BIP WARNINGS
+                    Alarme sonore A.. Z, octet correspondant 1 à 26
+                    0x00  00  0  No alarm
+                    0x01  01  A  
+                    0x02  02  B  Negative Difference 2 B
+                    0x03  03  C  Negative Difference 1 C
+                    0x04  04  D  
+                    0x05  05  E  
+                    0x06  06  F  Min. Sensor 1 temp. F
+                    0x07  07  G  Min. Sensor 2 temp. G
+                    0x08  08  H  Max. Sensor 1 temp. H
+                    0x09  09  I  Max. Sensor 2 temp. I
+                    0xA   10  J  Max. Sens. 1 voltage J
+                  0xB   11  K  Max. Sens. 2 voltage K
+                  0xC   12  L  
+                  0xD   13  M  Positive Difference 2 M
+                  0xE   14  N  Positive Difference 1 N
+                  0xF   15  O  Min. Altitude O
+                  0x10  16  P  Min. Power Voltage P    // We use this one for Battery Warning
+                  0x11  17  Q  Min. Cell voltage Q
+                  0x12  18  R  Min. Sens. 1 voltage R
+                  0x13  19  S  Min. Sens. 2 voltage S
+                  0x14  20  T  Minimum RPM T
+                  0x15  21  U  
+                  0x16  22  V  Max. used capacity V
+                  0x17  23  W  Max. Current W
+                  0x18  24  X  Max. Power Voltage X
+                  0x19  25  Y  Maximum RPM Y
+                  0x1A  26  Z  Max. Altitude Z
+                        */
+  byte sensor_id;                       //#04 constant value 0x90 for VARIO, other values for other modules
+  byte alarm_invers1;                   //#05 alarm bitmask. Value is displayed inverted
+              //Bit#  Alarm field
+            // 0    all cell voltage
+            // 1    Battery 1
+            // 2    Battery 2
+            // 3    Temperature 1
+            // 4    Temperature 2
+            // 5    Fuel
+            // 6    mAh
+            // 7    Altitude
+  uint16_t altitude;                    //#06 altitude in meters. offset of 500, 500 = 0m
+                                        //#07 MSB
+  uint16_t max_altitude;                //#08 max. altitude in meters. offset of 500, 500 = 0m
+                                        //#09 MSB
+  uint16_t min_altitude;                //#10 min. altitude in meters. offset of 500, 500 = 0m
+                                        //#11 MSB
+  uint16_t climbrate_L;                 //#12 climb rate in 0.01m/s. Value of 30000 = 0.00 m/s
+                                        //#13 MSB
+  uint16_t climbrate3s;                 //#14 climb rate in 0.01 m/3sec. Value of 3000 = 0m/3sec
+										//#15 MSB
+  uint16_t climbrate10s;                //#16 climb rate in 0.01 m/10sec. Value of 3000 = 0m/10sec
+										//#17 MSB
+  byte ascii[21];						//#18-#38 ASCII Characters ??
+  byte free_ascii[3];					//#39-#41 freeASCII Characters ??
+  byte flightDirection;         		//#42 Flight direction. 1 = 2°; 0° (North), 90° (East), 180° (South), 270° (West) */
+  byte version;                         //#43 version number (Bytes 35 .43 new but not yet in the record in the display!)
+  byte stop_byte;                       //#44 stop byte 0x7D
+  byte parity;                          //#45 CHECKSUM CRC/Parity (calculated dynamicaly)
+} HOTT_VARIO_MSG ;
+
+// structure of ESC 
+typedef struct {
+  byte start_byte;          //#01 start byte constant value 0x7c
+  byte esc_sensor_id;       //#02 EAM sensor ID. constat value 0x8c=ESC
+  byte warning_beeps;       //#03 1=A 2=B ... 0x1a=Z  0 = no alarm
+                  /* VOICE OR BIP WARNINGS
+                    Alarme sonore A.. Z, octet correspondant 1 à 26
+                    0x00  00  0  No alarm
+                    0x01  01  A  
+                    0x02  02  B  Negative Difference 2 B
+                    0x03  03  C  Negative Difference 1 C
+                    0x04  04  D  
+                    0x05  05  E  
+                    0x06  06  F  Min. Sensor 1 temp. F
+                    0x07  07  G  Min. Sensor 2 temp. G
+                    0x08  08  H  Max. Sensor 1 temp. H
+                    0x09  09  I  Max. Sensor 2 temp. I
+                    0xA   10  J  Max. Sens. 1 voltage J
+                  0xB   11  K  Max. Sens. 2 voltage K
+                  0xC   12  L  
+                  0xD   13  M  Positive Difference 2 M
+                  0xE   14  N  Positive Difference 1 N
+                  0xF   15  O  Min. Altitude O
+                  0x10  16  P  Min. Power Voltage P    // We use this one for Battery Warning
+                  0x11  17  Q  Min. Cell voltage Q
+                  0x12  18  R  Min. Sens. 1 voltage R
+                  0x13  19  S  Min. Sens. 2 voltage S
+                  0x14  20  T  Minimum RPM T
+                  0x15  21  U  
+                  0x16  22  V  Max. used capacity V
+                  0x17  23  W  Max. Current W
+                  0x18  24  X  Max. Power Voltage X
+                  0x19  25  Y  Maximum RPM Y
+                  0x1A  26  Z  Max. Altitude Z
+                        */
+  byte sensor_id;                       //#04 constant value 0xc0 for ESC, other values for other modules
+  byte alarm_invers1;                   //#05 alarm bitmask. Value is displayed inverted
+              //Bit#  Alarm field
+            // 0    all cell voltage
+            // 1    Battery 1
+            // 2    Battery 2
+            // 3    Temperature 1
+            // 4    Temperature 2
+            // 5    Fuel
+            // 6    mAh
+            // 7    Altitude
+  byte alarm_invers2;                    //#06 alarm bitmask. Value is displayed inverted
+                //Bit#  Alarm Field
+                // 0    main power current
+                // 1    main power voltage
+                // 2    Altitude
+                // 3    m/s                            
+                  // 4    m/3s
+                  // 5    unknown
+                // 6    unknown
+                // 7    "ON" sign/text msg active
+  uint16_t main_voltage;                //#07 LSB Main power voltage using 0.1V steps 100 == 10,0V
+										//#08 MSB
+  uint16_t min_main_voltage;            //#09 LSB Min. Main power voltage using 0.1V steps 100 == 10,0V
+										//#10 MSB
+  uint16_t batt_cap;                    //#11 LSB used battery capacity in 10mAh steps
+                                        //#12 MSB
+  byte esc_temperature;                 //#13 ESC Temperature. Offset of 20. a value of 20 = 0°C
+  byte max_esc_temperature;             //#14 Max ESC Temperature. Offset of 20. a value of 20 = 0°C
+  uint16_t current;                     //#15 current in 0.1A steps 100 == 10,0A
+                                        //#16 MSB current display only goes up to 99.9 A (continuous)
+  uint16_t max_current;                 //#17 Max. current in 0.1A steps 100 == 10,0A
+                                        //#18 MSB max. current display only goes up to 99.9 A (continuous) 
+  uint16_t rpm;                         //#19 RPM in 10 RPM steps. 300 = 3000rpm
+                                        //#20 MSB										
+  uint16_t max_rpm;                     //#21 RPM in 10 RPM steps. 300 = 3000rpm
+                                        //#22 MSB										
+  byte throttle;						//#23 Throttle Position??
+  uint16_t speed;           			//#24 Low Byte m/s resolution 0.01m. 30000 = 0.00m/s (1=0.01m/s) */
+										//#25 MSB
+  uint16_t max_speed;           		//#26 Low Byte m/s resolution 0.01m. 30000 = 0.00m/s (1=0.01m/s) */
+										//#27 MSB
+  byte bec_voltage;                     //#28 BEC voltage using 0.1V steps 100 == 10,0V
+  byte min_bec_voltage;             	//#29 Min. BEC power voltage using 0.1V steps 100 == 10,0V
+  byte bec_current;                     //#30 BEC current in 0.1A steps 100 == 10,0A
+  byte bec_current2;                    //#31 BEC current in 0.1A steps 100 == 10,0A???
+  byte max_bec_current;                 //#32 Max. BEC current in 0.1A steps 100 == 10,0A
+  byte pwm;								//#33 PWM ??
+  byte bec_temperature;                 //#34 BEC Temperature. Offset of 20. a value of 20 = 0°C
+  byte max_bec_temperature;             //#35 Max BEC Temperature. Offset of 20. a value of 20 = 0°C
+  byte mot_temperature;                 //#36 Motor Temperature. Offset of 20. a value of 20 = 0°C
+  byte max_mot_temperature;             //#37 Max Motor Temperature. Offset of 20. a value of 20 = 0°C
+  uint16_t rpm_no_gear;                 //#38 RPM without gear in 10 RPM steps. 300 = 3000rpm
+                                        //#39 MSB
+  byte timing;							//#40 timing??
+  byte adv_timing;						//#41 advanced timing??
+  byte hi_mot_no;						//#42 highest current motor number
+  byte version;                         //#43 version number (highest current of motor 1-x)
+  byte stop_byte;                       //#44 stop byte 0x7D
+  byte parity;                          //#45 CHECKSUM CRC/Parity (calculated dynamicaly)
+} HOTT_ESC_MSG ;
+
+// structure of TEXT Message 
+typedef struct {
+  byte start_byte;          //#01 start byte constant value 0x7b
+  byte esc;       			//#02 Escape (higher-ranking menu in text mode or Text mode leave)
+  byte warning_beeps;       //#03 1=A 2=B ... 0x1a=Z  0 = no alarm
+                  /* VOICE OR BIP WARNINGS
+                    Alarme sonore A.. Z, octet correspondant 1 à 26
+                    0x00  00  0  No alarm
+                    0x01  01  A  
+                    0x02  02  B  Negative Difference 2 B
+                    0x03  03  C  Negative Difference 1 C
+                    0x04  04  D  
+                    0x05  05  E  
+                    0x06  06  F  Min. Sensor 1 temp. F
+                    0x07  07  G  Min. Sensor 2 temp. G
+                    0x08  08  H  Max. Sensor 1 temp. H
+                    0x09  09  I  Max. Sensor 2 temp. I
+                    0xA   10  J  Max. Sens. 1 voltage J
+                  0xB   11  K  Max. Sens. 2 voltage K
+                  0xC   12  L  
+                  0xD   13  M  Positive Difference 2 M
+                  0xE   14  N  Positive Difference 1 N
+                  0xF   15  O  Min. Altitude O
+                  0x10  16  P  Min. Power Voltage P    // We use this one for Battery Warning
+                  0x11  17  Q  Min. Cell voltage Q
+                  0x12  18  R  Min. Sens. 1 voltage R
+                  0x13  19  S  Min. Sens. 2 voltage S
+                  0x14  20  T  Minimum RPM T
+                  0x15  21  U  
+                  0x16  22  V  Max. used capacity V
+                  0x17  23  W  Max. Current W
+                  0x18  24  X  Max. Power Voltage X
+                  0x19  25  Y  Maximum RPM Y
+                  0x1A  26  Z  Max. Altitude Z
+                        */
+  byte text[8][21];			    //#04...#171 168 ASCII text to display to
+						                // Bit 7 = 1 -> Inverse character display
+						                // Display 21x8
+  byte stop_byte;		        //#172 constant value 0x7d
+  byte parity;                          //#173 CHECKSUM CRC/Parity (calculated dynamicaly)
+} HOTT_TXT_MSG ;
 
 
 class OXS_OUT {
@@ -341,6 +651,10 @@ extern volatile uint8_t debug04 ;
 void setHottNewData( struct t_sportData * volatile pdata, uint16_t id, uint32_t value ) ;
 void initHottUart( ) ;
 
+#ifdef HOTT_TEXT
+void invert_line(uint8_t line);
+#endif
+
 #ifdef GPS_INSTALLED
 void convertLonLat_Hott( int32_t GPS_LatLon, uint16_t  * degMin , uint16_t * decimalMin ) ;
 #endif
@@ -356,6 +670,7 @@ extern volatile uint16_t RpmValue ;
 #define   RECEIVE            3        // Receiving byte.
 #define   TxPENDING          4
 #define   WAITING            5
+#define   Tx_TXT_PENDING	 6		//Pending TXT Message for HOTT
 
 
 //This section chooses the correct timer values for Hott protocol = 19200 baud.

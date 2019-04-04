@@ -8,7 +8,12 @@
 
 #ifdef DEBUG
 // ************************* here Several parameters to help debugging
-  //#define DEBUGHOTT
+  #define DEBUGHOTT
+#endif
+
+#ifdef HOTT_TEXT
+	#include "hott_eeprom.h"	//Need the struct
+	HOTT_EEPROM hott_eeprom_rw;
 #endif
 
 extern OXS_MS5611 oXs_MS5611 ;
@@ -29,7 +34,13 @@ volatile uint8_t debugStatus ;
 volatile static union {              // union is a easy way to access the data in several ways (name of field + index of byte)
     volatile HOTT_GAM_MSG gamMsg ;   // structured general air module
     volatile HOTT_GPS_MSG gpsMsg ;
-    volatile uint8_t txBuffer[TXHOTTDATA_BUFFERSIZE] ;
+	volatile HOTT_EAM_MSG eamMsg ;
+	volatile HOTT_VARIO_MSG varioMsg ;
+	volatile HOTT_ESC_MSG escMsg ;
+	volatile HOTT_TXT_MSG txtMsg ;
+	volatile uint8_t txBuffer[TXHOTTDATA_BUFFERSIZE];
+
+    
 }  TxHottData;
 
 
@@ -40,11 +51,16 @@ static volatile unsigned char SwUartTXBitCount ; //!< TX bit counter.
 static volatile uint8_t SwUartRXData ;           //!< Storage for received bits.
 static volatile uint8_t SwUartRXBitCount ;       //!< RX bit counter.
 static volatile uint8_t TxCount ;
+static volatile uint8_t txhottdata_buffersize; 	//Buffersize, either for TEXT oder BIN Mode
 static volatile uint8_t LastRx ;                 // last byte received (allows to check on the second byte received for polling)
 volatile uint8_t debugUartRx ;
 static uint8_t delayTxPendingCount ;             // Used to register the number of extra delay(each 1msec) to wait in TxPending (so before replying)
 volatile uint8_t ppmInterrupted ; // This flag is activated at the end of handling interrupt on Timer 1 Compare A if during this interrupt handling an interrupt on pin change (INT0 or INT1) occurs
-                         // in this case, ppm will be wrong and has to be discarded       
+                         // in this case, ppm will be wrong and has to be discarded 
+
+static volatile int8_t hott_line_edit = -1;
+static volatile int8_t hott_line_select = 1;
+static volatile int8_t hott_page = 1;       						 
 
 static uint8_t convertGpsFix[5] = {0x2d , 0x2d , 0x32 , 0x33 , 0x44 } ; 
 
@@ -133,6 +149,7 @@ void OXS_OUT::sendData() {
 //      printer->print(F(" Tc=")); printer->println(TxCount);
 #endif
     if ( flagUpdateHottBuffer ) {        // this flag is set to true when UART get a polling of the device. Then measurement must be filled in the buffer
+	
 #ifdef DEBUG_BLINK_UPLOAD_HOTT_DATA
       blinkLed(5) ; // blink every 500 ms at least
 #endif 
@@ -140,120 +157,526 @@ void OXS_OUT::sendData() {
         for ( uint8_t i = 0 ; i < TXHOTTDATA_BUFFERSIZE ; i++ ) {       // first fill the buffer with 0 
            TxHottData.txBuffer[i] = 0 ;
         }
-        if ( flagUpdateHottBuffer == 0x8d  ) {        // this flag is set to true when UART get a polling of the GAM device. Then measurement must be filled in the buffer
-              TxHottData.gamMsg.start_byte    = 0x7c ;
-              TxHottData.gamMsg.gam_sensor_id = 0x8d ; //GENRAL AIR MODULE = HOTT_TELEMETRY_GAM_SENSOR_ID
-              TxHottData.gamMsg.sensor_id     = 0xd0 ;
-              TxHottData.gamMsg.stop_byte     = 0x7D ;
+        if ( flagUpdateHottBuffer == HOTT_SENSOR) {        // this flag is set to true when UART get a polling of the GAM device. Then measurement must be filled in the buffer
+			txhottdata_buffersize = TXHOTTDATA_BIN_BUFFERSIZE;
+#if (HOTT_SENSOR == GAM)
+				  TxHottData.gamMsg.start_byte    = 0x7c ;
+				  TxHottData.gamMsg.gam_sensor_id = HOTT_TELEMETRY_GAM_SENSOR_ID ; //GENRAL AIR MODULE = HOTT_TELEMETRY_GAM_SENSOR_ID
+				  TxHottData.gamMsg.sensor_id     = HOTTV4_GAM_SENSOR_TEXT_ID ;
+				  TxHottData.gamMsg.stop_byte     = 0x7D ;
 
-// in general air module data to fill are:
-#if defined(NUMBEROFCELLS) && (NUMBEROFCELLS >= 1) 
-              TxHottData.gamMsg.cell[0] =  voltageData->mVoltCell[0] /20 ; // Volt Cell 1 (in 2 mV increments, 210 == 4.20 V)
-#endif
-#if  defined(NUMBEROFCELLS) && (NUMBEROFCELLS >= 2) 
-              TxHottData.gamMsg.cell[1] =  voltageData->mVoltCell[1] /20 ; // Volt Cell 2 (in 2 mV increments, 210 == 4.20 V)
-#endif
-#if  defined(NUMBEROFCELLS) && (NUMBEROFCELLS >= 3) 
-              TxHottData.gamMsg.cell[2] =  voltageData->mVoltCell[2] /20 ; // Volt Cell 3 (in 2 mV increments, 210 == 4.20 V)
-#endif
-#if  defined(NUMBEROFCELLS) && (NUMBEROFCELLS >= 4) 
-             TxHottData.gamMsg.cell[3] =  voltageData->mVoltCell[3] /20 ; // Volt Cell 4 (in 2 mV increments, 210 == 4.20 V)
-#endif
-#if  defined(NUMBEROFCELLS) && (NUMBEROFCELLS >= 5) 
-              TxHottData.gamMsg.cell[4] =  voltageData->mVoltCell[4] /20 ; // Volt Cell 5 (in 2 mV increments, 210 == 4.20 V)
-#endif
-#if  defined(NUMBEROFCELLS) && (NUMBEROFCELLS >= 6) 
-              TxHottData.gamMsg.cell[5] =  voltageData->mVoltCell[5] /20 ; // Volt Cell 6 (in 2 mV increments, 210 == 4.20 V)
-#endif
-#if defined(BATTERY_1_SOURCE) && ( (BATTERY_1_SOURCE == VOLT_1) || (BATTERY_1_SOURCE == VOLT_2) || (BATTERY_1_SOURCE == VOLT_3) || (BATTERY_1_SOURCE == VOLT_4) || (BATTERY_1_SOURCE == VOLT_5) || (BATTERY_1_SOURCE == VOLT_6) ) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES)
-              TxHottData.gamMsg.Battery1 = voltageData->mVolt[BATTERY_1_SOURCE - VOLT_1].value / 100;    //battery 1 voltage  0.1V steps. 55 = 5.5V only pos. voltages
-#endif
-#if defined(BATTERY_1_SOURCE) && ( (BATTERY_1_SOURCE == ADS_VOLT_1) || (BATTERY_1_SOURCE == ADS_VOLT_2) || (BATTERY_1_SOURCE == ADS_VOLT_3) || (BATTERY_1_SOURCE == ADS_VOLT_4) ) && defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE)
-              TxHottData.gamMsg.Battery1 = ads_Conv[BATTERY_1_SOURCE - ADS_VOLT_1].value / 100;    //battery 1 voltage  0.1V steps. 55 = 5.5V only pos. voltages
-#endif
-#if defined(BATTERY_2_SOURCE) && ( (BATTERY_2_SOURCE == VOLT_1) || (BATTERY_2_SOURCE == VOLT_2) || (BATTERY_2_SOURCE == VOLT_3) || (BATTERY_2_SOURCE == VOLT_4) || (BATTERY_2_SOURCE == VOLT_5) || (BATTERY_2_SOURCE == VOLT_6) ) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES)
-              TxHottData.gamMsg.Battery2 = voltageData->mVolt[BATTERY_2_SOURCE - VOLT_1].value / 100;    //battery 1 voltage  0.1V steps. 55 = 5.5V only pos. voltages
-#endif
-#if defined(BATTERY_2_SOURCE) && ( (BATTERY_2_SOURCE == ADS_VOLT_1) || (BATTERY_2_SOURCE == ADS_VOLT_2) || (BATTERY_2_SOURCE == ADS_VOLT_3) || (BATTERY_2_SOURCE == ADS_VOLT_4) ) && defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE)
-              TxHottData.gamMsg.Battery1 = ads_Conv[BATTERY_2_SOURCE - ADS_VOLT_1].value / 100;    //battery 1 voltage  0.1V steps. 55 = 5.5V only pos. voltages
-#endif
+	// in general air module data to fill are:
+	#if defined(NUMBEROFCELLS) && (NUMBEROFCELLS >= 1) 
+				  TxHottData.gamMsg.cell[0] =  voltageData->mVoltCell[0] /20 ; // Volt Cell 1 (in 2 mV increments, 210 == 4.20 V)
+	#endif
+	#if  defined(NUMBEROFCELLS) && (NUMBEROFCELLS >= 2) 
+				  TxHottData.gamMsg.cell[1] =  voltageData->mVoltCell[1] /20 ; // Volt Cell 2 (in 2 mV increments, 210 == 4.20 V)
+	#endif
+	#if  defined(NUMBEROFCELLS) && (NUMBEROFCELLS >= 3) 
+				  TxHottData.gamMsg.cell[2] =  voltageData->mVoltCell[2] /20 ; // Volt Cell 3 (in 2 mV increments, 210 == 4.20 V)
+	#endif
+	#if  defined(NUMBEROFCELLS) && (NUMBEROFCELLS >= 4) 
+				 TxHottData.gamMsg.cell[3] =  voltageData->mVoltCell[3] /20 ; // Volt Cell 4 (in 2 mV increments, 210 == 4.20 V)
+	#endif
+	#if  defined(NUMBEROFCELLS) && (NUMBEROFCELLS >= 5) 
+				  TxHottData.gamMsg.cell[4] =  voltageData->mVoltCell[4] /20 ; // Volt Cell 5 (in 2 mV increments, 210 == 4.20 V)
+	#endif
+	#if  defined(NUMBEROFCELLS) && (NUMBEROFCELLS >= 6) 
+				  TxHottData.gamMsg.cell[5] =  voltageData->mVoltCell[5] /20 ; // Volt Cell 6 (in 2 mV increments, 210 == 4.20 V)
+	#endif
+	#if defined(BATTERY_1_SOURCE) && ( (BATTERY_1_SOURCE == VOLT_1) || (BATTERY_1_SOURCE == VOLT_2) || (BATTERY_1_SOURCE == VOLT_3) || (BATTERY_1_SOURCE == VOLT_4) || (BATTERY_1_SOURCE == VOLT_5) || (BATTERY_1_SOURCE == VOLT_6) ) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES)
+				  TxHottData.gamMsg.Battery1 = voltageData->mVolt[BATTERY_1_SOURCE - VOLT_1].value / 100;    //battery 1 voltage  0.1V steps. 55 = 5.5V only pos. voltages
+	#endif
+	#if defined(BATTERY_1_SOURCE) && ( (BATTERY_1_SOURCE == ADS_VOLT_1) || (BATTERY_1_SOURCE == ADS_VOLT_2) || (BATTERY_1_SOURCE == ADS_VOLT_3) || (BATTERY_1_SOURCE == ADS_VOLT_4) ) && defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE)
+				  TxHottData.gamMsg.Battery1 = ads_Conv[BATTERY_1_SOURCE - ADS_VOLT_1].value / 100;    //battery 1 voltage  0.1V steps. 55 = 5.5V only pos. voltages
+	#endif
+	#if defined(BATTERY_2_SOURCE) && ( (BATTERY_2_SOURCE == VOLT_1) || (BATTERY_2_SOURCE == VOLT_2) || (BATTERY_2_SOURCE == VOLT_3) || (BATTERY_2_SOURCE == VOLT_4) || (BATTERY_2_SOURCE == VOLT_5) || (BATTERY_2_SOURCE == VOLT_6) ) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES)
+				  TxHottData.gamMsg.Battery2 = voltageData->mVolt[BATTERY_2_SOURCE - VOLT_1].value / 100;    //battery 1 voltage  0.1V steps. 55 = 5.5V only pos. voltages
+	#endif
+	#if defined(BATTERY_2_SOURCE) && ( (BATTERY_2_SOURCE == ADS_VOLT_1) || (BATTERY_2_SOURCE == ADS_VOLT_2) || (BATTERY_2_SOURCE == ADS_VOLT_3) || (BATTERY_2_SOURCE == ADS_VOLT_4) ) && defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE)
+				  TxHottData.gamMsg.Battery1 = ads_Conv[BATTERY_2_SOURCE - ADS_VOLT_1].value / 100;    //battery 1 voltage  0.1V steps. 55 = 5.5V only pos. voltages
+	#endif
 
-#if defined(TEMPERATURE_1_SOURCE) && (TEMPERATURE_1_SOURCE == TEST_1 )
-              TxHottData.gamMsg.temperature1 = test1.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
-#elif defined(TEMPERATURE_1_SOURCE) && (TEMPERATURE_1_SOURCE == TEST_2 )
-              TxHottData.gamMsg.temperature1 = test2.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
-#elif defined(TEMPERATURE_1_SOURCE) && (TEMPERATURE_1_SOURCE == TEST_3 )
-              TxHottData.gamMsg.temperature1 = test3.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
-#elif defined(TEMPERATURE_1_SOURCE) && (TEMPERATURE_1_SOURCE == GLIDER_RATIO ) && defined(GLIDER_RATIO_CALCULATED_AFTER_X_SEC)
-              TxHottData.gamMsg.temperature1 = gliderRatio.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
-#elif defined(TEMPERATURE_1_SOURCE) && (TEMPERATURE_1_SOURCE == SENSITIVITY ) && defined(VARIO)
-              TxHottData.gamMsg.temperature1 = oXs_MS5611.varioData.sensitivity.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
-#elif defined(TEMPERATURE_1_SOURCE) && (TEMPERATURE_1_SOURCE == PPM ) && defined(PIN_PPM)
-              TxHottData.gamMsg.temperature1 = ppm.value + 120 ; // Hott applies an offset of 20. A value of 20 = 0°C    
-#elif defined(TEMPERATURE_1_SOURCE) && ( (TEMPERATURE_1_SOURCE == VOLT_1 ) || (TEMPERATURE_1_SOURCE == VOLT_2 ) || (TEMPERATURE_1_SOURCE == VOLT_3 ) || (TEMPERATURE_1_SOURCE == VOLT_4 ) || (TEMPERATURE_1_SOURCE == VOLT_5 ) || (TEMPERATURE_1_SOURCE == VOLT_6 ) )  && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES)
-              TxHottData.gamMsg.temperature1 = (voltageData->mVolt[TEMPERATURE_1_SOURCE - VOLT_1].value ) / 10 + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
-#else
-              TxHottData.gamMsg.temperature1 = 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
-#endif
+	#if defined(TEMPERATURE_1_SOURCE) && (TEMPERATURE_1_SOURCE == TEST_1 )
+				  TxHottData.gamMsg.temperature1 = test1.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_1_SOURCE) && (TEMPERATURE_1_SOURCE == TEST_2 )
+				  TxHottData.gamMsg.temperature1 = test2.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_1_SOURCE) && (TEMPERATURE_1_SOURCE == TEST_3 )
+				  TxHottData.gamMsg.temperature1 = test3.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_1_SOURCE) && (TEMPERATURE_1_SOURCE == GLIDER_RATIO ) && defined(GLIDER_RATIO_CALCULATED_AFTER_X_SEC)
+				  TxHottData.gamMsg.temperature1 = gliderRatio.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_1_SOURCE) && (TEMPERATURE_1_SOURCE == SENSITIVITY ) && defined(VARIO)
+				  TxHottData.gamMsg.temperature1 = oXs_MS5611.varioData.sensitivity.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_1_SOURCE) && (TEMPERATURE_1_SOURCE == PPM ) && defined(PIN_PPM)
+				  TxHottData.gamMsg.temperature1 = ppm.value + 120 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_1_SOURCE) && ( (TEMPERATURE_1_SOURCE == VOLT_1 ) || (TEMPERATURE_1_SOURCE == VOLT_2 ) || (TEMPERATURE_1_SOURCE == VOLT_3 ) || (TEMPERATURE_1_SOURCE == VOLT_4 ) || (TEMPERATURE_1_SOURCE == VOLT_5 ) || (TEMPERATURE_1_SOURCE == VOLT_6 ) )  && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES)
+				  TxHottData.gamMsg.temperature1 = (voltageData->mVolt[TEMPERATURE_1_SOURCE - VOLT_1].value ) / 10 + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#else
+				  TxHottData.gamMsg.temperature1 = 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#endif
 
-#if defined(TEMPERATURE_2_SOURCE) && (TEMPERATURE_2_SOURCE == TEST_1 )
-              TxHottData.gamMsg.temperature2 = test1.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
-#elif defined(TEMPERATURE_2_SOURCE) && (TEMPERATURE_2_SOURCE == TEST_2 )
-              TxHottData.gamMsg.temperature2 = test2.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
-#elif defined(TEMPERATURE_2_SOURCE) && (TEMPERATURE_2_SOURCE == TEST_3 )
-              TxHottData.gamMsg.temperature2 = test3.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
-#elif defined(TEMPERATURE_2_SOURCE) && (TEMPERATURE_2_SOURCE == GLIDER_RATIO ) && defined(GLIDER_RATIO_CALCULATED_AFTER_X_SEC)
-              TxHottData.gamMsg.temperature2 = gliderRatio.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
-#elif defined(TEMPERATURE_2_SOURCE) && (TEMPERATURE_2_SOURCE == SENSITIVITY ) && defined(VARIO)
-              TxHottData.gamMsg.temperature2 = oXs_MS5611.varioData.sensitivity.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
-#elif defined(TEMPERATURE_2_SOURCE) && (TEMPERATURE_2_SOURCE == PPM ) && defined(PIN_PPM)
-              TxHottData.gamMsg.temperature2 = ppm.value + 120 ; // Hott applies an offset of 20. A value of 20 = 0°C    
-#elif defined(TEMPERATURE_2_SOURCE) && ( (TEMPERATURE_2_SOURCE == VOLT_1 ) || (TEMPERATURE_2_SOURCE == VOLT_2 ) || (TEMPERATURE_2_SOURCE == VOLT_3 ) || (TEMPERATURE_2_SOURCE == VOLT_4 ) || (TEMPERATURE_2_SOURCE == VOLT_5 ) || (TEMPERATURE_2_SOURCE == VOLT_6 ) ) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES)
-              TxHottData.gamMsg.temperature2 = (voltageData->mVolt[TEMPERATURE_2_SOURCE - VOLT_1].value ) /10  + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
-#else
-              TxHottData.gamMsg.temperature2 = 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
-#endif
+	#if defined(TEMPERATURE_2_SOURCE) && (TEMPERATURE_2_SOURCE == TEST_1 )
+				  TxHottData.gamMsg.temperature2 = test1.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_2_SOURCE) && (TEMPERATURE_2_SOURCE == TEST_2 )
+				  TxHottData.gamMsg.temperature2 = test2.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_2_SOURCE) && (TEMPERATURE_2_SOURCE == TEST_3 )
+				  TxHottData.gamMsg.temperature2 = test3.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_2_SOURCE) && (TEMPERATURE_2_SOURCE == GLIDER_RATIO ) && defined(GLIDER_RATIO_CALCULATED_AFTER_X_SEC)
+				  TxHottData.gamMsg.temperature2 = gliderRatio.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_2_SOURCE) && (TEMPERATURE_2_SOURCE == SENSITIVITY ) && defined(VARIO)
+				  TxHottData.gamMsg.temperature2 = oXs_MS5611.varioData.sensitivity.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_2_SOURCE) && (TEMPERATURE_2_SOURCE == PPM ) && defined(PIN_PPM)
+				  TxHottData.gamMsg.temperature2 = ppm.value + 120 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_2_SOURCE) && ( (TEMPERATURE_2_SOURCE == VOLT_1 ) || (TEMPERATURE_2_SOURCE == VOLT_2 ) || (TEMPERATURE_2_SOURCE == VOLT_3 ) || (TEMPERATURE_2_SOURCE == VOLT_4 ) || (TEMPERATURE_2_SOURCE == VOLT_5 ) || (TEMPERATURE_2_SOURCE == VOLT_6 ) ) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES)
+				  TxHottData.gamMsg.temperature2 = (voltageData->mVolt[TEMPERATURE_2_SOURCE - VOLT_1].value ) /10  + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#else
+				  TxHottData.gamMsg.temperature2 = 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#endif
 
-              TxHottData.gamMsg.rpm++ ;
-              if ( TxHottData.gamMsg.rpm > 1000) TxHottData.gamMsg.rpm = 1 ; 
-#ifdef MEASURE_RPM 
-              TxHottData.gamMsg.rpm  = RpmValue /10 ;                      //#22 RPM in 10 RPM steps. 300 = 3000rpm
-#endif
-#ifdef VARIO       
-              TxHottData.gamMsg.altitude =  ((varioData->relativeAlt.value ) / 100 ) + 500 ;  //altitude in meters. offset of 500, 500 = 0m
-              TxHottData.gamMsg.climbrate_L = mainVspeed.value + 30000 ;          //climb rate in 0.01m/s. Value of 30000 = 0.00 m/s
-#else
-              TxHottData.gamMsg.altitude =  500 ;  //altitude in meters. offset of 500, 500 = 0m
-              TxHottData.gamMsg.climbrate_L = 30000 ;          //climb rate in 0.01m/s. Value of 30000 = 0.00 m/s
-#endif
-              TxHottData.gamMsg.climbrate3s = 120 ;                     //#28 climb rate in m/3sec. Value of 120 = 0m/3sec
-#if defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES)
-              TxHottData.gamMsg.current =  currentData->milliAmps.value /100;               //current in 0.1A steps 100 == 10,0A
-#endif
-#if defined(MAIN_BATTERY_SOURCE) && ( (MAIN_BATTERY_SOURCE == VOLT_1) || (MAIN_BATTERY_SOURCE == VOLT_2) || (MAIN_BATTERY_SOURCE == VOLT_3) || (MAIN_BATTERY_SOURCE == VOLT_4) || (MAIN_BATTERY_SOURCE == VOLT_5) || (MAIN_BATTERY_SOURCE == VOLT_6) ) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES)
-              TxHottData.gamMsg.main_voltage = voltageData->mVolt[MAIN_BATTERY_SOURCE - VOLT_1].value / 100;          //Main power voltage using 0.1V steps 100 == 10,0V] / 100
-#endif
-#if defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES)
-              TxHottData.gamMsg.batt_cap =  currentData->consumedMilliAmps.value / 10 ;   // used battery capacity in 10mAh steps
-#endif
-#ifdef AIRSPEED       
-               TxHottData.gamMsg.speed =  airSpeedData->airSpeed.value  ;                  //  Km/h 
-#endif
-#if defined(NUMBEROFCELLS) && (NUMBEROFCELLS >= 0) 
-              TxHottData.gamMsg.min_cell_volt =  voltageData->mVoltCellMin /20 ; // minimum cell voltage in 2mV steps. 124 = 2,48V
-#endif
-#if defined(NUMBEROFCELLS) && (NUMBEROFCELLS > 0) && defined(CELL_UNDERVOLTAGE_WARNING)
-             TxHottData.gamMsg.warning_beeps = warning_beeps_Hott();   // Transmitter warning message
-#endif
+				  TxHottData.gamMsg.rpm++ ;
+				  if ( TxHottData.gamMsg.rpm > 1000) TxHottData.gamMsg.rpm = 1 ; 
+	#ifdef MEASURE_RPM 
+				  TxHottData.gamMsg.rpm  = RpmValue /10 ;                      //#22 RPM in 10 RPM steps. 300 = 3000rpm
+	#else
+					TxHottData.gamMsg.rpm  = 0 ;                      //set to 0 when no RPM to be measured
+	#endif
+	#ifdef VARIO       
+				  TxHottData.gamMsg.altitude =  ((varioData->relativeAlt.value ) / 100 ) + 500 ;  //altitude in meters. offset of 500, 500 = 0m
+				  TxHottData.gamMsg.climbrate_L = mainVspeed.value + 30000 ;          //climb rate in 0.01m/s. Value of 30000 = 0.00 m/s
+	#else
+				  TxHottData.gamMsg.altitude =  500 ;  //altitude in meters. offset of 500, 500 = 0m
+				  TxHottData.gamMsg.climbrate_L = 30000 ;          //climb rate in 0.01m/s. Value of 30000 = 0.00 m/s
+	#endif
+				  TxHottData.gamMsg.climbrate3s = 120 ;                     //#28 climb rate in m/3sec. Value of 120 = 0m/3sec
+	#if defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES)
+				  TxHottData.gamMsg.current =  currentData->milliAmps.value /100;               //current in 0.1A steps 100 == 10,0A
+	#endif
+	#if defined(MAIN_BATTERY_SOURCE) && ( (MAIN_BATTERY_SOURCE == VOLT_1) || (MAIN_BATTERY_SOURCE == VOLT_2) || (MAIN_BATTERY_SOURCE == VOLT_3) || (MAIN_BATTERY_SOURCE == VOLT_4) || (MAIN_BATTERY_SOURCE == VOLT_5) || (MAIN_BATTERY_SOURCE == VOLT_6) ) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES)
+				  TxHottData.gamMsg.main_voltage = voltageData->mVolt[MAIN_BATTERY_SOURCE - VOLT_1].value / 100;          //Main power voltage using 0.1V steps 100 == 10,0V] / 100
+	#endif
+	#if defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES)
+				  TxHottData.gamMsg.batt_cap =  currentData->consumedMilliAmps.value / 10 ;   // used battery capacity in 10mAh steps
+	#endif
+	#ifdef AIRSPEED       
+				   TxHottData.gamMsg.speed =  airSpeedData->airSpeed.value  ;                  //  Km/h 
+	#endif
+	#if defined(NUMBEROFCELLS) && (NUMBEROFCELLS >= 0) 
+				  TxHottData.gamMsg.min_cell_volt =  voltageData->mVoltCellMin /20 ; // minimum cell voltage in 2mV steps. 124 = 2,48V
+	#endif
+	#if defined(NUMBEROFCELLS) && (NUMBEROFCELLS > 0) && defined(CELL_UNDERVOLTAGE_WARNING)
+				 TxHottData.gamMsg.warning_beeps = warning_beeps_Hott();   // Transmitter warning message
+	#endif
 
-// field of msg not implemented
-//  byte climbrate3s;                     //#28 climb rate in m/3sec. Value of 120 = 0m/3sec
-//  byte min_cell_volt_num;               //#38 number of the cell with the lowest voltage
-//  uint16_t rpm2;                        //#39 LSB 2nd RPM in 10 RPM steps. 100 == 1000rpm
-//  byte general_error_number;            //#41 General Error Number (Voice Error == 12) TODO: more documentation
-//  byte pressure;                        //#42 High pressure up to 16bar. 0,1bar scale. 20 == 2.0bar
+	// field of msg not implemented
+	//  byte climbrate3s;                     //#28 climb rate in m/3sec. Value of 120 = 0m/3sec
+	//  byte min_cell_volt_num;               //#38 number of the cell with the lowest voltage
+	//  uint16_t rpm2;                        //#39 LSB 2nd RPM in 10 RPM steps. 100 == 1000rpm
+	//  byte general_error_number;            //#41 General Error Number (Voice Error == 12) TODO: more documentation
+	//  byte pressure;                        //#42 High pressure up to 16bar. 0,1bar scale. 20 == 2.0bar
 
-            } 
+				} 
+				
+#endif // End GAM	
+	
+#if (HOTT_SENSOR == EAM)
+				  TxHottData.eamMsg.start_byte    = 0x7c ;
+				  TxHottData.eamMsg.eam_sensor_id = HOTT_TELEMETRY_EAM_SENSOR_ID ; //GENRAL AIR MODULE = HOTT_TELEMETRY_GAM_SENSOR_ID
+				  TxHottData.eamMsg.sensor_id     = HOTTV4_EAM_SENSOR_TEXT_ID ;
+				  TxHottData.eamMsg.stop_byte     = 0x7D ;
+
+	// in general air module data to fill are:
+	#if defined(NUMBEROFCELLS) && (NUMBEROFCELLS >= 1) 
+				  TxHottData.eamMsg.cell_low[0] =  voltageData->mVoltCell[0] /20 ; // Volt Cell 1 (in 2 mV increments, 210 == 4.20 V)
+	#endif
+	#if  defined(NUMBEROFCELLS) && (NUMBEROFCELLS >= 2) 
+				  TxHottData.eamMsg.cell_low[1] =  voltageData->mVoltCell[1] /20 ; // Volt Cell 2 (in 2 mV increments, 210 == 4.20 V)
+	#endif
+	#if  defined(NUMBEROFCELLS) && (NUMBEROFCELLS >= 3) 
+				  TxHottData.eamMsg.cell_low[2] =  voltageData->mVoltCell[2] /20 ; // Volt Cell 3 (in 2 mV increments, 210 == 4.20 V)
+	#endif
+	#if  defined(NUMBEROFCELLS) && (NUMBEROFCELLS >= 4) 
+				  TxHottData.eamMsg.cell_low[3] =  voltageData->mVoltCell[3] /20 ; // Volt Cell 4 (in 2 mV increments, 210 == 4.20 V)
+	#endif
+	#if  defined(NUMBEROFCELLS) && (NUMBEROFCELLS >= 5) 
+				  TxHottData.eamMsg.cell_low[4] =  voltageData->mVoltCell[4] /20 ; // Volt Cell 5 (in 2 mV increments, 210 == 4.20 V)
+	#endif
+	#if  defined(NUMBEROFCELLS) && (NUMBEROFCELLS >= 6) 
+				  TxHottData.eamMsg.cell_low[5] =  voltageData->mVoltCell[5] /20 ; // Volt Cell 6 (in 2 mV increments, 210 == 4.20 V)
+	#endif
+	#if  defined(NUMBEROFCELLS) && (NUMBEROFCELLS >= 7) 
+				  TxHottData.eamMsg.cell_low[6] =  voltageData->mVoltCell[6] /20 ; // Volt Cell 7 (in 2 mV increments, 210 == 4.20 V)
+	#endif
+	#if defined(BATTERY_1_SOURCE) && ( (BATTERY_1_SOURCE == VOLT_1) || (BATTERY_1_SOURCE == VOLT_2) || (BATTERY_1_SOURCE == VOLT_3) || (BATTERY_1_SOURCE == VOLT_4) || (BATTERY_1_SOURCE == VOLT_5) || (BATTERY_1_SOURCE == VOLT_6) ) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES)
+				  TxHottData.eamMsg.Battery1 = voltageData->mVolt[BATTERY_1_SOURCE - VOLT_1].value / 100;    //battery 1 voltage  0.1V steps. 55 = 5.5V only pos. voltages
+	#endif
+	#if defined(BATTERY_1_SOURCE) && ( (BATTERY_1_SOURCE == ADS_VOLT_1) || (BATTERY_1_SOURCE == ADS_VOLT_2) || (BATTERY_1_SOURCE == ADS_VOLT_3) || (BATTERY_1_SOURCE == ADS_VOLT_4) ) && defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE)
+				  TxHottData.eamMsg.Battery1 = ads_Conv[BATTERY_1_SOURCE - ADS_VOLT_1].value / 100;    //battery 1 voltage  0.1V steps. 55 = 5.5V only pos. voltages
+	#endif
+	#if defined(BATTERY_2_SOURCE) && ( (BATTERY_2_SOURCE == VOLT_1) || (BATTERY_2_SOURCE == VOLT_2) || (BATTERY_2_SOURCE == VOLT_3) || (BATTERY_2_SOURCE == VOLT_4) || (BATTERY_2_SOURCE == VOLT_5) || (BATTERY_2_SOURCE == VOLT_6) ) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES)
+				  TxHottData.eamMsg.Battery2 = voltageData->mVolt[BATTERY_2_SOURCE - VOLT_1].value / 100;    //battery 1 voltage  0.1V steps. 55 = 5.5V only pos. voltages
+	#endif
+	#if defined(BATTERY_2_SOURCE) && ( (BATTERY_2_SOURCE == ADS_VOLT_1) || (BATTERY_2_SOURCE == ADS_VOLT_2) || (BATTERY_2_SOURCE == ADS_VOLT_3) || (BATTERY_2_SOURCE == ADS_VOLT_4) ) && defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE)
+				  TxHottData.eamMsg.Battery1 = ads_Conv[BATTERY_2_SOURCE - ADS_VOLT_1].value / 100;    //battery 1 voltage  0.1V steps. 55 = 5.5V only pos. voltages
+	#endif
+
+	#if defined(TEMPERATURE_1_SOURCE) && (TEMPERATURE_1_SOURCE == TEST_1 )
+				  TxHottData.eamMsg.temperature1 = test1.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_1_SOURCE) && (TEMPERATURE_1_SOURCE == TEST_2 )
+				  TxHottData.eamMsg.temperature1 = test2.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_1_SOURCE) && (TEMPERATURE_1_SOURCE == TEST_3 )
+				  TxHottData.eamMsg.temperature1 = test3.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_1_SOURCE) && (TEMPERATURE_1_SOURCE == GLIDER_RATIO ) && defined(GLIDER_RATIO_CALCULATED_AFTER_X_SEC)
+				  TxHottData.eamMsg.temperature1 = gliderRatio.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_1_SOURCE) && (TEMPERATURE_1_SOURCE == SENSITIVITY ) && defined(VARIO)
+				  TxHottData.eamMsg.temperature1 = oXs_MS5611.varioData.sensitivity.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_1_SOURCE) && (TEMPERATURE_1_SOURCE == PPM ) && defined(PIN_PPM)
+				  TxHottData.eamMsg.temperature1 = ppm.value + 120 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_1_SOURCE) && ( (TEMPERATURE_1_SOURCE == VOLT_1 ) || (TEMPERATURE_1_SOURCE == VOLT_2 ) || (TEMPERATURE_1_SOURCE == VOLT_3 ) || (TEMPERATURE_1_SOURCE == VOLT_4 ) || (TEMPERATURE_1_SOURCE == VOLT_5 ) || (TEMPERATURE_1_SOURCE == VOLT_6 ) )  && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES)
+				  TxHottData.eamMsg.temperature1 = (voltageData->mVolt[TEMPERATURE_1_SOURCE - VOLT_1].value ) / 10 + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#else
+				  TxHottData.eamMsg.temperature1 = 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#endif
+
+	#if defined(TEMPERATURE_2_SOURCE) && (TEMPERATURE_2_SOURCE == TEST_1 )
+				  TxHottData.eamMsg.temperature2 = test1.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_2_SOURCE) && (TEMPERATURE_2_SOURCE == TEST_2 )
+				  TxHottData.eamMsg.temperature2 = test2.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_2_SOURCE) && (TEMPERATURE_2_SOURCE == TEST_3 )
+				  TxHottData.eamMsg.temperature2 = test3.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_2_SOURCE) && (TEMPERATURE_2_SOURCE == GLIDER_RATIO ) && defined(GLIDER_RATIO_CALCULATED_AFTER_X_SEC)
+				  TxHottData.eamMsg.temperature2 = gliderRatio.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_2_SOURCE) && (TEMPERATURE_2_SOURCE == SENSITIVITY ) && defined(VARIO)
+				  TxHottData.eamMsg.temperature2 = oXs_MS5611.varioData.sensitivity.value + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_2_SOURCE) && (TEMPERATURE_2_SOURCE == PPM ) && defined(PIN_PPM)
+				  TxHottData.eamMsg.temperature2 = ppm.value + 120 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#elif defined(TEMPERATURE_2_SOURCE) && ( (TEMPERATURE_2_SOURCE == VOLT_1 ) || (TEMPERATURE_2_SOURCE == VOLT_2 ) || (TEMPERATURE_2_SOURCE == VOLT_3 ) || (TEMPERATURE_2_SOURCE == VOLT_4 ) || (TEMPERATURE_2_SOURCE == VOLT_5 ) || (TEMPERATURE_2_SOURCE == VOLT_6 ) ) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES)
+				  TxHottData.eamMsg.temperature2 = (voltageData->mVolt[TEMPERATURE_2_SOURCE - VOLT_1].value ) /10  + 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#else
+				  TxHottData.eamMsg.temperature2 = 20 ; // Hott applies an offset of 20. A value of 20 = 0°C    
+	#endif
+
+				  TxHottData.eamMsg.rpm++ ;
+				  if ( TxHottData.eamMsg.rpm > 1000) TxHottData.eamMsg.rpm = 1 ; 
+	#ifdef MEASURE_RPM 
+				  TxHottData.eamMsg.rpm  = RpmValue /10 ;                      //#22 RPM in 10 RPM steps. 300 = 3000rpm
+	#else
+					TxHottData.eamMsg.rpm  = 0 ;                      //set to 0 when no RPM to be measured
+	#endif
+	#ifdef VARIO       
+				  TxHottData.eamMsg.altitude =  ((varioData->relativeAlt.value ) / 100 ) + 500 ;  //altitude in meters. offset of 500, 500 = 0m
+				  TxHottData.eamMsg.climbrate_L = mainVspeed.value + 30000 ;          //climb rate in 0.01m/s. Value of 30000 = 0.00 m/s
+	#else
+				  TxHottData.eamMsg.altitude =  500 ;  //altitude in meters. offset of 500, 500 = 0m
+				  TxHottData.eamMsg.climbrate_L = 30000 ;          //climb rate in 0.01m/s. Value of 30000 = 0.00 m/s
+	#endif
+				  TxHottData.eamMsg.climbrate3s = 120 ;                     //#28 climb rate in m/3sec. Value of 120 = 0m/3sec
+	#if defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES)
+				  TxHottData.eamMsg.current =  currentData->milliAmps.value /100;               //current in 0.1A steps 100 == 10,0A
+	#endif
+	#if defined(MAIN_BATTERY_SOURCE) && ( (MAIN_BATTERY_SOURCE == VOLT_1) || (MAIN_BATTERY_SOURCE == VOLT_2) || (MAIN_BATTERY_SOURCE == VOLT_3) || (MAIN_BATTERY_SOURCE == VOLT_4) || (MAIN_BATTERY_SOURCE == VOLT_5) || (MAIN_BATTERY_SOURCE == VOLT_6) ) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES)
+				  TxHottData.eamMsg.main_voltage = voltageData->mVolt[MAIN_BATTERY_SOURCE - VOLT_1].value / 100;          //Main power voltage using 0.1V steps 100 == 10,0V] / 100
+	#endif
+	#if defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES)
+				  TxHottData.eamMsg.batt_cap =  currentData->consumedMilliAmps.value / 10 ;   // used battery capacity in 10mAh steps
+	#endif
+	#ifdef AIRSPEED       
+				   TxHottData.eamMsg.speed =  airSpeedData->airSpeed.value  ;                  //  Km/h 
+	#endif
+	//#if defined(NUMBEROFCELLS) && (NUMBEROFCELLS >= 0) 
+	//			  TxHottData.eamMsg.min_cell_volt =  voltageData->mVoltCellMin /20 ; // minimum cell voltage in 2mV steps. 124 = 2,48V
+	//#endif
+	#if defined(NUMBEROFCELLS) && (NUMBEROFCELLS > 0) && defined(CELL_UNDERVOLTAGE_WARNING)
+				 TxHottData.eamMsg.warning_beeps = warning_beeps_Hott();   // Transmitter warning message
+	#endif
+
+	// field of msg not implemented
+	//  byte climbrate3s;                     //#28 climb rate in m/3sec. Value of 120 = 0m/3sec
+	//  byte min_cell_volt_num;               //#38 number of the cell with the lowest voltage
+	//  uint16_t rpm2;                        //#39 LSB 2nd RPM in 10 RPM steps. 100 == 1000rpm
+	//  byte general_error_number;            //#41 General Error Number (Voice Error == 12) TODO: more documentation
+	//  byte pressure;                        //#42 High pressure up to 16bar. 0,1bar scale. 20 == 2.0bar
+
+				}
+#endif //End EAM
+
+#ifdef HOTT_TEXT
+				
+					else if ((flagUpdateHottBuffer & 0xf0) == HOTT_SENSOR_TEXT){
+					txhottdata_buffersize = TXHOTTDATA_TEXT_BUFFERSIZE;
+					TxHottData.txtMsg.start_byte = 0x7b;	//Start Byte always 0x7b
+					TxHottData.txtMsg.esc = HOTT_SENSOR_TEXT & 0xf0;
+					TxHottData.txtMsg.stop_byte = 0x7d;	//Stop Byte always 0x7d
+					memset(TxHottData.txtMsg.text, 0x20, HOTT_TEXTMODE_MSG_LEN);
+					
+					byte hott_button = flagUpdateHottBuffer & 0x0f;
+					
+					if ((hott_button == HOTTV4_BUTTON_ESC) && (hott_line_edit == -1) && (hott_page == 1)){
+						TxHottData.txtMsg.esc = 0x01;
+					} else{
+						switch (hott_page) {
+							
+							case 1: //Page 1
+							{
+								if ((hott_button == HOTTV4_BUTTON_ENT) && (hott_line_edit == -1)){
+									hott_page++;
+									if (hott_page > HOTT_PAGES)		//Limit maximium Page Number
+										hott_page = HOTT_PAGES;
+								} else if ((hott_button == HOTTV4_BUTTON_ESC) && (hott_line_edit == -1)){
+									hott_page--;
+									if (hott_page < 1)			//Limit minimum Page Number
+										hott_page = 1;
+								}
+								
+								
+								
+								if ((hott_button == HOTTV4_BUTTON_INC) && (hott_line_edit == -1))
+									hott_line_select = min(4, hott_line_select +1 );
+								else if ((hott_button == HOTTV4_BUTTON_DEC) && (hott_line_edit == -1))
+									hott_line_select = max(1, hott_line_select -1 );
+								else if ((hott_button == HOTTV4_BUTTON_SET) && (hott_line_edit == -1)){
+									hott_line_edit = hott_line_select;
+									hott_button = 0x0F;									
+								}									
+								
+								if ((hott_button == HOTTV4_BUTTON_INC) && (hott_line_edit == 1)){
+									hott_eeprom_rw.write_protocol(min(HOTT_TELEMETRY_EAM_SENSOR_ID, (hott_eeprom_rw.get_protocol() + 1)));										
+								} else if ((hott_button == HOTTV4_BUTTON_DEC) && (hott_line_edit == 1)){
+									hott_eeprom_rw.write_protocol(max(HOTT_TELEMETRY_GAM_SENSOR_ID, (hott_eeprom_rw.get_protocol() - 1)));										
+								} else if ((hott_button == HOTTV4_BUTTON_SET) && (hott_line_edit == 1)){
+									hott_line_edit = -1;
+									hott_eeprom_rw.write_eeprom();
+								}
+								
+								if ((hott_button == HOTTV4_BUTTON_INC) && (hott_line_edit == 2)){
+									hott_eeprom_rw.write_voltage_coef(min(1000.0f, (hott_eeprom_rw.get_voltage_coef() + 0.1f)));										
+								}
+								else if ((hott_button == HOTTV4_BUTTON_DEC) && (hott_line_edit == 2)){
+									hott_eeprom_rw.write_voltage_coef(max(1.0f, (hott_eeprom_rw.get_voltage_coef() - 0.1f)));										
+								}
+								else if ((hott_button == HOTTV4_BUTTON_ENT) && (hott_line_edit == 2)){
+									hott_eeprom_rw.write_voltage_coef(min(1000.0f, (hott_eeprom_rw.get_voltage_coef() + 5.0f)));							
+								}
+								else if ((hott_button == HOTTV4_BUTTON_ESC) && (hott_line_edit == 2)){
+									hott_eeprom_rw.write_voltage_coef(max(1.0f, (hott_eeprom_rw.get_voltage_coef() - 5.0f)));								
+								}
+								else if ((hott_button == HOTTV4_BUTTON_SET) && (hott_line_edit == 2)){
+									hott_line_edit = -1;
+									hott_eeprom_rw.write_eeprom();
+								}
+								
+								if ((hott_button == HOTTV4_BUTTON_INC) && (hott_line_edit == 3)){
+									hott_eeprom_rw.write_current_coef(min(1000.0f, (hott_eeprom_rw.get_current_coef() + 0.1f)));										
+								}
+								else if ((hott_button == HOTTV4_BUTTON_DEC) && (hott_line_edit == 3)){
+									hott_eeprom_rw.write_current_coef(max(1.0f, (hott_eeprom_rw.get_current_coef() - 0.1f)));										
+								}
+								else if ((hott_button == HOTTV4_BUTTON_ENT) && (hott_line_edit == 3)){
+									hott_eeprom_rw.write_current_coef(min(1000.0f, (hott_eeprom_rw.get_current_coef() + 5.0f)));							
+								}
+								else if ((hott_button == HOTTV4_BUTTON_ESC) && (hott_line_edit == 3)){
+									hott_eeprom_rw.write_current_coef(max(1.0f, (hott_eeprom_rw.get_current_coef() - 5.0f)));								
+								}
+								else if ((hott_button == HOTTV4_BUTTON_SET) && (hott_line_edit == 3)){
+									hott_line_edit = -1;
+									hott_eeprom_rw.write_eeprom();
+								}
+								
+								if ((hott_button == HOTTV4_BUTTON_INC) && (hott_line_edit == 4)){
+									hott_eeprom_rw.write_current_offset(min(1000, (hott_eeprom_rw.get_current_offset() + 1)));										
+								}
+								else if ((hott_button == HOTTV4_BUTTON_DEC) && (hott_line_edit == 4)){
+									hott_eeprom_rw.write_current_offset(max(-1000, (hott_eeprom_rw.get_current_offset() - 1)));										
+								}
+								else if ((hott_button == HOTTV4_BUTTON_ENT) && (hott_line_edit == 4)){
+									hott_eeprom_rw.write_current_offset(min(1000, (hott_eeprom_rw.get_current_offset() + 10)));							
+								}
+								else if ((hott_button == HOTTV4_BUTTON_ESC) && (hott_line_edit == 4)){
+									hott_eeprom_rw.write_current_offset(max(-1000, (hott_eeprom_rw.get_current_offset() - 10)));								
+								}
+								else if ((hott_button == HOTTV4_BUTTON_SET) && (hott_line_edit == 4)){
+									hott_line_edit = -1;
+									hott_eeprom_rw.write_eeprom();
+								}
+								
+								
+								
+								//Line 1
+								TxHottData.txtMsg.text[0][0] = 'C';
+								TxHottData.txtMsg.text[0][1] = 'u';
+								TxHottData.txtMsg.text[0][2] = 'r';
+								TxHottData.txtMsg.text[0][3] = 'r';
+								TxHottData.txtMsg.text[0][4] = 'a';
+								TxHottData.txtMsg.text[0][5] = 'l';
+								TxHottData.txtMsg.text[0][6] = 't';
+								//TxHottData.txtMsg.text[0][7] = ' ';
+								TxHottData.txtMsg.text[0][8] = 'o';
+								TxHottData.txtMsg.text[0][9] = 'X';
+								TxHottData.txtMsg.text[0][10] = 's';
+								//TxHottData.txtMsg.text[0][11] = ' ';
+								TxHottData.txtMsg.text[0][12] = 'v';
+								TxHottData.txtMsg.text[0][13] = '0';
+								TxHottData.txtMsg.text[0][14] = '.';
+								TxHottData.txtMsg.text[0][15] = '0';
+								TxHottData.txtMsg.text[0][16] = '1';
+								//TxHottData.txtMsg.text[0][18] = ' ';
+								TxHottData.txtMsg.text[0][19] = '<';
+								TxHottData.txtMsg.text[0][20] = '>';
+								
+								//Line 2
+								//TxHottData.txtMsg.text[1][0] = ' ';
+								//TxHottData.txtMsg.text[1][1] = ' ';
+								TxHottData.txtMsg.text[1][2] = 'S';
+								TxHottData.txtMsg.text[1][3] = 'e';
+								TxHottData.txtMsg.text[1][4] = 'n';
+								TxHottData.txtMsg.text[1][5] = 's';
+								TxHottData.txtMsg.text[1][6] = 'o';
+								TxHottData.txtMsg.text[1][7] = 'r';
+								//TxHottData.txtMsg.text[1][8] = ' ';
+								TxHottData.txtMsg.text[1][9] = 'T';
+								TxHottData.txtMsg.text[1][10] = 'y';
+								TxHottData.txtMsg.text[1][11] = 'p';
+								TxHottData.txtMsg.text[1][12] = 'e';
+								TxHottData.txtMsg.text[1][13] = ':';
+								if (hott_eeprom_rw.get_protocol() == HOTT_TELEMETRY_GAM_SENSOR_ID){
+									TxHottData.txtMsg.text[1][15] = 'G';
+									TxHottData.txtMsg.text[1][16] = 'A';
+									TxHottData.txtMsg.text[1][17] = 'M';
+								} else if (hott_eeprom_rw.get_protocol() == HOTT_TELEMETRY_EAM_SENSOR_ID){
+									TxHottData.txtMsg.text[1][15] = 'E';
+									TxHottData.txtMsg.text[1][16] = 'A';
+									TxHottData.txtMsg.text[1][17] = 'M';
+								} else {
+									TxHottData.txtMsg.text[1][15] = '-';
+									TxHottData.txtMsg.text[1][16] = '-';
+									TxHottData.txtMsg.text[1][17] = '-';
+								}
+								//TxHottData.txtMsg.text[1][18] = ' ';
+								//TxHottData.txtMsg.text[1][19] = ' ';
+								//TxHottData.txtMsg.text[1][20] = ' ';								
+								
+								//Line 3
+								//TxHottData.txtMsg.text[2][0] = ' ';
+								//TxHottData.txtMsg.text[2][1] = ' ';
+								TxHottData.txtMsg.text[2][2] = 'V';
+								TxHottData.txtMsg.text[2][3] = '_';
+								TxHottData.txtMsg.text[2][4] = 'c';
+								TxHottData.txtMsg.text[2][5] = 'o';
+								TxHottData.txtMsg.text[2][6] = 'e';
+								TxHottData.txtMsg.text[2][7] = 'f';
+								TxHottData.txtMsg.text[2][8] = '.';
+								TxHottData.txtMsg.text[2][9] = ':';
+								//TxHottData.txtMsg.text[2][10] = ' ';
+								dtostrf(hott_eeprom_rw.get_voltage_coef(), 5, 1,  TxHottData.txtMsg.text[2]+12);
+								TxHottData.txtMsg.text[2][17] = 'm';
+								TxHottData.txtMsg.text[2][18] = 'V';
+								TxHottData.txtMsg.text[2][19] = '/';
+								TxHottData.txtMsg.text[2][20] = 'V';
+								
+								//Line 4
+								//TxHottData.txtMsg.text[3][0] = ' ';
+								//TxHottData.txtMsg.text[3][1] = ' ';
+								TxHottData.txtMsg.text[3][2] = 'A';
+								TxHottData.txtMsg.text[3][3] = '_';
+								TxHottData.txtMsg.text[3][4] = 'c';
+								TxHottData.txtMsg.text[3][5] = 'o';
+								TxHottData.txtMsg.text[3][6] = 'e';
+								TxHottData.txtMsg.text[3][7] = 'f';
+								TxHottData.txtMsg.text[3][8] = '.';
+								TxHottData.txtMsg.text[3][9] = ':';
+								//TxHottData.txtMsg.text[3][10] = ' ';
+								dtostrf(hott_eeprom_rw.get_current_coef(), 5, 1,  TxHottData.txtMsg.text[3]+12);
+								TxHottData.txtMsg.text[3][17] = 'm';
+								TxHottData.txtMsg.text[3][18] = 'V';
+								TxHottData.txtMsg.text[3][19] = '/';
+								TxHottData.txtMsg.text[3][20] = 'A';
+								
+								//Line 5
+								//TxHottData.txtMsg.text[4][0] = ' ';
+								//TxHottData.txtMsg.text[4][1] = ' ';
+								TxHottData.txtMsg.text[4][2] = 'A';
+								TxHottData.txtMsg.text[4][3] = '_';
+								TxHottData.txtMsg.text[4][4] = 'o';
+								TxHottData.txtMsg.text[4][5] = 'f';
+								TxHottData.txtMsg.text[4][6] = 'f';
+								TxHottData.txtMsg.text[4][7] = 's';
+								TxHottData.txtMsg.text[4][8] = '.';
+								TxHottData.txtMsg.text[4][9] = ':';
+								//TxHottData.txtMsg.text[4][10] = ' ';
+								dtostrf(hott_eeprom_rw.get_current_offset(), 5, 1,  TxHottData.txtMsg.text[4]+12);
+								TxHottData.txtMsg.text[4][17] = 'm';
+								TxHottData.txtMsg.text[4][18] = 'V';
+								//TxHottData.txtMsg.text[4][19] = ' ';
+								//TxHottData.txtMsg.text[4][20] = ' ';
+								
+								//Line 6
+								//TxHottData.txtMsg.text[5][0] = ' ';
+								//TxHottData.txtMsg.text[5][1] = ' ';
+								TxHottData.txtMsg.text[5][2] = 'V';
+								TxHottData.txtMsg.text[5][3] = 'o';
+								TxHottData.txtMsg.text[5][4] = 'l';
+								TxHottData.txtMsg.text[5][5] = 't';
+								TxHottData.txtMsg.text[5][6] = 'a';
+								TxHottData.txtMsg.text[5][7] = 'g';
+								TxHottData.txtMsg.text[5][8] = 'e';
+								TxHottData.txtMsg.text[5][9] = ':';
+								//TxHottData.txtMsg.text[5][10] = ' ';
+								dtostrf((voltageData->mVolt[MAIN_BATTERY_SOURCE - VOLT_1].value / 1000.0f), 5, 2,  TxHottData.txtMsg.text[5]+12);     //battery 1 voltage  in mV
+								TxHottData.txtMsg.text[5][17] = 'V';
+								//TxHottData.txtMsg.text[5][14] = ' ';
+								//TxHottData.txtMsg.text[5][19] = ' ';
+								//TxHottData.txtMsg.text[5][20] = ' ';	
+
+								//Line 7
+								//TxHottData.txtMsg.text[6][0] = ' ';
+								//TxHottData.txtMsg.text[6][1] = ' ';
+								TxHottData.txtMsg.text[6][2] = 'C';
+								TxHottData.txtMsg.text[6][3] = 'u';
+								TxHottData.txtMsg.text[6][4] = 'r';
+								TxHottData.txtMsg.text[6][5] = 'r';
+								TxHottData.txtMsg.text[6][6] = 'e';
+								TxHottData.txtMsg.text[6][7] = 'n';
+								TxHottData.txtMsg.text[6][8] = 't';
+								TxHottData.txtMsg.text[6][9] = ':';
+								//TxHottData.txtMsg.text[6][10] = ' ';
+								dtostrf((currentData->milliAmps.value / 1000.f), 5, 2,  TxHottData.txtMsg.text[6]+12);     //battery 1 voltage  in mV
+								TxHottData.txtMsg.text[6][17] = 'A';
+								//TxHottData.txtMsg.text[6][14] = ' ';
+								//TxHottData.txtMsg.text[6][19] = ' ';
+								//TxHottData.txtMsg.text[6][20] = ' ';	
+								
+								//Line 8
+								TxHottData.txtMsg.text[7][0] = 'I';
+								TxHottData.txtMsg.text[7][1] = 'n';
+								TxHottData.txtMsg.text[7][2] = 'p';
+								TxHottData.txtMsg.text[7][3] = 'u';
+								TxHottData.txtMsg.text[7][4] = 't';
+								//TxHottData.txtMsg.text[7][5] = ' ';
+								TxHottData.txtMsg.text[7][6] = 'S';
+								TxHottData.txtMsg.text[7][7] = 'e';
+								TxHottData.txtMsg.text[7][8] = 't';
+								TxHottData.txtMsg.text[7][9] = 'u';
+								TxHottData.txtMsg.text[7][10] = 'p';
+								//TxHottData.txtMsg.text[7][11] = ' ';
+								TxHottData.txtMsg.text[7][13] = 'P';
+								TxHottData.txtMsg.text[7][14] = 'a';
+								TxHottData.txtMsg.text[7][15] = 'g';
+								TxHottData.txtMsg.text[7][16] = 'e';
+								//TxHottData.txtMsg.text[7][17] = ' ';
+								TxHottData.txtMsg.text[7][18] = '1';
+								TxHottData.txtMsg.text[7][19] = '/';
+								TxHottData.txtMsg.text[7][20] = '1';
+								
+								TxHottData.txtMsg.text[hott_line_select][0] = '>';
+								invert_line(hott_line_edit);
+								
+							break;
+							}							
+						}
+					}
+				}				
+#endif	
+
+	
 #ifdef GPS_INSTALLED            
               else {
             // here the code for GPS
@@ -335,13 +758,13 @@ void OXS_OUT::sendData() {
             }  // end else => flagUpdateHottBuffer == GPS
 #endif         // end of GPS_Installed            
             // calculate the check sum on first bytes
-            TxHottData.txBuffer[TXHOTTDATA_BUFFERSIZE-1] = 0 ;
-            for(uint8_t i = 0; i < TXHOTTDATA_BUFFERSIZE-1; i++){  // one byte less because the last byte is the checksum
-              TxHottData.txBuffer[TXHOTTDATA_BUFFERSIZE-1] += TxHottData.txBuffer[i];
+            TxHottData.txBuffer[txhottdata_buffersize-1] = 0 ;
+            for(uint8_t i = 0; i < txhottdata_buffersize-1; i++){  // one byte less because the last byte is the checksum
+              TxHottData.txBuffer[txhottdata_buffersize-1] += TxHottData.txBuffer[i];
             }  // end for
             flagUpdateHottBuffer = 0 ;       // reset the flag to say that all data have been updated and that UART can transmit the buffer            
 #ifdef DEBUGHOTT
-//            for(uint8_t i = 0; i < TXHOTTDATA_BUFFERSIZE; i++){  // include the last byte (checksum)
+//            for(uint8_t i = 0; i < txhottdata_buffersize; i++){  // include the last byte (checksum)
 //                 printer->print(TxHottData.txBuffer[i], HEX); printer->print(F(" "));
 //            } // end for    
 //            printer->print(tempFlag , HEX) ;
@@ -634,7 +1057,7 @@ ISR(TIMER1_COMPA_vect)
           break ;
 
     case TRANSMIT_STOP_BIT:                    //************************************* handling after the stop bit has been sent
-        if (  ++TxCount < TXHOTTDATA_BUFFERSIZE  ) {   
+        if (  ++TxCount < txhottdata_buffersize  ) {   
               SwUartTXData = TxHottData.txBuffer[TxCount] ;
               CLEAR_TX_PIN_MB();                     // Send a logic 0 on the TX_PIN as start bit  
               OCR1A = TCNT1 + TICKS2WAITONEHOTT  - INTERRUPT_BETWEEN_TRANSMIT ;   // Count one period into the future.
@@ -659,7 +1082,14 @@ ISR(TIMER1_COMPA_vect)
                   if( !(GET_RX_PIN( ) == 0 )) data |= 0x80 ;  // If a logical 1 is read, let the data mirror this.
                   SwUartRXData = data ;
                } else {                                       //Done receiving =  8 bits are in SwUartRXData
-                  if ( ( LastRx == HOTT_BINARY_MODE_REQUEST_ID ) && ( ( SwUartRXData == HOTT_TELEMETRY_GAM_SENSOR_ID)    // if the previous byte identifies a polling for a reply in binary format and current is oXs sensor ID
+					/*#ifdef DEBUG 
+						Serial.print(HOTT_SENSOR_TEXT, HEX);
+						Serial.print("");
+						Serial.print(LastRx, HEX);
+						Serial.print(", ");
+						Serial.println(SwUartRXData, HEX);
+					#endif*/
+                  if ( ( LastRx == HOTT_BINARY_MODE_REQUEST_ID ) && ( ( SwUartRXData == HOTT_SENSOR)    // if the previous byte identifies a polling for a reply in binary format and current is oXs sensor ID
 #ifdef GPS_INSTALLED                           
                               || (  SwUartRXData == HOTT_TELEMETRY_GPS_SENSOR_ID ) 
 #endif                                                                                
@@ -668,7 +1098,18 @@ ISR(TIMER1_COMPA_vect)
                                state = TxPENDING ;
                                OCR1A += ( DELAY_4000 - TICKS2WAITONEHOTT) ;                   // 4ms gap before sending; normally Hott protocols says to wait 5 msec but this is too much for timer1
                                delayTxPendingCount  = 1 ;            //  ask for 1 more delay of 1ms in order to reach the total of 5msec                 
-                  } else {                                // Previous code is not equal to HOTT_BINARY_MODE_REQUEST_ID , enter to iddle mode (so we will accept to read another byte)                                 
+                  }
+#ifdef HOTT_TEXT	
+				else if (( LastRx == HOTT_TEXT_MODE_REQUEST_ID) && ((SwUartRXData & 0xF0) == HOTT_SENSOR_TEXT)) {    // if the previous byte identifies a polling for a reply in binary format and current is oXs sensor ID
+                                                                              
+                                                                                    // the sensor has to reply (if it has data; here we assume it has always data and the data will be in the Hott buffer)
+                               flagUpdateHottBuffer = SwUartRXData;         // flag to say to send function that the buffer must be filled. It is expected that send function is called fast enough (so main loop may not be blocked) 
+                               state = TxPENDING ;
+                               OCR1A += ( DELAY_4000 - TICKS2WAITONEHOTT) ;                   // 4ms gap before sending; normally Hott protocols says to wait 5 msec but this is too much for timer1
+                               delayTxPendingCount  = 1 ;            //  ask for 1 more delay of 1ms in order to reach the total of 5msec                 
+                  }			  
+#endif				  
+				  else {                                // Previous code is not equal to HOTT_BINARY_MODE_REQUEST_ID , enter to iddle mode (so we will accept to read another byte)                                 
                       DISABLE_TIMER_INTERRUPT() ;         // Stop the timer interrupts.
                       state = IDLE ;                      // Go back to idle.
                       PCIFR = ( 1<<PCIF2 ) ;              // clear pending interrupt
@@ -696,6 +1137,27 @@ ISR(TIMER1_COMPA_vect)
                 }
             }    
             break ;
+			
+/*#ifdef HOTT_TEXT
+	  case Tx_TXT_PENDING :                                         //End of delay before sending data has occurs
+            if ( delayTxPendingCount ) {                       // if additional delay is requested, perform it      
+                delayTxPendingCount--;
+                OCR1A += DELAY_1000 ; 
+            } else {
+                if ( flagUpdateHottBuffer ) {                     // it is expected that the main loop will update the buffer and set this flag to true within the delay
+                    OCR1A += DELAY_1000 ;                          // if it is not yet done, stay Tx_TXT_PENDING for 1 msec more
+//                    state = WAITING ;
+                } else {
+                    CLEAR_TX_PIN_MB() ;                                // Send a start bit (logic 0 on the TX_PIN).
+                    OCR1A = TCNT1 + TICKS2WAITONEHOTT  - INTERRUPT_ENTRY_TRANSMIT ;                // Count one period into the future (less due to time to enter ISR)
+                    SwUartTXBitCount = 0 ;
+                    SwUartTXData = TxHottData.txBuffer[0] ;
+                    TxCount = 0 ;
+                    state = TRANSMIT ;
+                }
+            }    
+            break ;
+#endif*/
 
     case WAITING :                                  // At the end of wait time, stop timer interrupt but allow pin change interrupt in order to allow to detect incoming data
            DISABLE_TIMER_INTERRUPT() ;              // Stop the timer interrupts.
@@ -759,6 +1221,18 @@ void initHottUart( )           //*************** initialise UART for Multiplex
 // This assumes it is the only pin change interrupt
 // on this port
 
+
+#ifdef HOTT_TEXT
+//This function inverts the Character in the display in text mode
+void invert_line(uint8_t line){
+	
+	if ((line >= 0 ) && (line <= 7)){
+		for (uint8_t i = 0; i < 21; i++){
+			TxHottData.txtMsg.text[line][i] += 0x80;		//set first bit in character to invert
+		}
+	}
+}
+#endif
 ISR(PCINT2_vect)                                  // There is a start bit.
 {
   if (!( TRXPIN & ( 1 << PIN_SERIALTX ) )) {      // Pin is low = start bit 
