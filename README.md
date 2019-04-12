@@ -12,7 +12,7 @@ For more details about openXsensor in general, please visit the project page at 
 * Edit values for current offset and current scale (mA/V) in HoTT Text-Menu
 * Live values for current in HoTT Text-Menu
 * Edit values for voltage scale (mV/V) in HoTT Text-Menu
-* * Live values for VOLT_1, ..., VOLT_6 in HoTT Text-Menu
+* Live values for VOLT_1, ..., VOLT_6 in HoTT Text-Menu
 
 
 
