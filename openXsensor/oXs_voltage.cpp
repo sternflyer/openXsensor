@@ -49,7 +49,12 @@ void OXS_VOLTAGE::setupVoltage( void ) {
   uint8_t tempPin[6 ] = { PIN_VOLTAGE };
 #else
   uint8_t tempPin[6 ] = { 8 , 8 , 8 , 8 , 8 , 8 } ;
-#endif  
+#endif
+#ifdef HOTT_TEXT  
+	for (byte i = 0; i < 6; i++){
+		tempPin[i] = volt_coef.get_voltage_pin(i);
+	}
+#endif
 #ifdef RESISTOR_TO_GROUND 
   float tempResistorToGround[6] = { RESISTOR_TO_GROUND } ;
 #else
@@ -109,7 +114,9 @@ void OXS_VOLTAGE::setupVoltage( void ) {
       voltageData.mVoltPerStep[cntInit] = tempRef / 1023.0 * ( tempResistorToGround[cntInit] + tempResistorToVoltage[cntInit] ) / tempResistorToGround[cntInit]  * tempScaleVoltage[cntInit];
     } else {
 	  #ifdef HOTT_TEXT
-		tempScaleVoltage[0] = 1 / (volt_coef.get_voltage_coef() / 1000.0f);
+		for (byte i = 0; i < 6; i++){
+			tempScaleVoltage[i] = 1 / (volt_coef.get_voltage_coef(i) / 1000.0f);
+		}
 	  #endif
       voltageData.mVoltPerStep[cntInit] = tempRef / 1023.0  * tempScaleVoltage[cntInit];  
     }
@@ -135,8 +142,30 @@ void OXS_VOLTAGE::setupVoltage( void ) {
 void OXS_VOLTAGE::readSensor() {
 	
 #ifdef HOTT_TEXT
-	//tempScaleVoltage[0] = 1 / (volt_coef.get_voltage_coef() / 1000.0f);
-	voltageData.mVoltPerStep[0] = REFERENCE_VOLTAGE / 1023.0  * (1 / (volt_coef.get_voltage_coef() / 1000.0f));
+	uint16_t tempRef;
+	#if defined(USE_INTERNAL_REFERENCE) && defined(REFERENCE_VOLTAGE) && REFERENCE_VOLTAGE < 2000
+	  tempRef = REFERENCE_VOLTAGE  ;
+	#elif defined(USE_INTERNAL_REFERENCE) && defined(REFERENCE_VOLTAGE)
+	  #error REFERENCE_VOLTAGE must be less than 2000 when USE_INTERNAL_REFERENCE is defined
+	#elif defined(USE_EXTERNAL_REFERENCE)
+	#ifndef REFERENCE_VOLTAGE
+	  #error REFERENCE_VOLTAGE must be defined when USE_EXTERNAL_REFERENCE is defined
+	#else
+	  tempRef = REFERENCE_VOLTAGE  ;
+	#endif
+	#elif defined(USE_INTERNAL_REFERENCE)
+	  tempRef = 1100 ;
+	#elif defined(REFERENCE_VOLTAGE) && REFERENCE_VOLTAGE > 2000
+	  tempRef = REFERENCE_VOLTAGE  ;
+	#elif defined(REFERENCE_VOLTAGE)
+	  #error REFERENCE_VOLTAGE must be greater than 2000 when USE_INTERNAL_REFERENCE is not defined
+	#else 
+	  tempRef = 5000 ;
+	#endif 
+	
+	for (byte i = 0; i < 6; i++){
+			voltageData.mVoltPerStep[i] = (tempRef /1023.0f) / (volt_coef.get_voltage_coef(i) / 1000.0f);
+		}
 #endif
 
     if (voltageData.atLeastOneVolt) { // no calculation if there is no voltage to calculate.
@@ -307,9 +336,9 @@ int OXS_VOLTAGE::readVoltage( int value ) { // value is the index in an aray giv
   analogRead( voltageData.mVoltPin[value]); // read the value from the sensor ; it requires about 120 usec 
   // discard the first measurement
   delayMicroseconds(100); // Wait for ADMux to settle 
+  
   return analogRead(voltageData.mVoltPin[value]); // use the second measurement ; it requires about 120 usec
 }
-
 
 void OXS_VOLTAGE::resetValues() {
   // not used currently

@@ -14,10 +14,12 @@
 #ifdef HOTT_TEXT
 	#include "hott_eeprom.h"	//Need the struct
 	HOTT_EEPROM hott_eeprom_rw;
-	static volatile int8_t hott_line_edit = -1;
-	static volatile int8_t hott_line_select = 1;
-	static volatile int8_t hott_page = 1; 
-	static volatile	int8_t sensor_type = hott_eeprom_rw.get_sensor_type();
+	static volatile byte hott_line_edit = -1;
+	static volatile byte hott_line_select = 1;
+	static volatile byte hott_page = 1; 
+	static volatile byte parameter = 0;
+	static volatile byte sensor_type;// = hott_eeprom_rw.get_sensor_type();
+	static volatile byte sensor_type_text;// = sensor_type << 4;
 #endif
 
 extern OXS_MS5611 oXs_MS5611 ;
@@ -76,8 +78,8 @@ OXS_OUT::OXS_OUT(uint8_t pinTx)
 #ifdef DEBUG 
   printer = &print; //operate on the address of print
 #endif
-} // end constructor
 
+} // end constructor
 
 // **************** Setup the OutputLib *********************
 void OXS_OUT::setup() {
@@ -107,6 +109,12 @@ void OXS_OUT::setup() {
     PCIFR = (1<<PCIF2) ;               	// clear pending interrupt
     initHottUart( ) ;                   // initialise UART 
 	
+#ifdef HOTT_TEXT
+	hott_eeprom_rw.read_eeprom();
+	sensor_type = hott_eeprom_rw.get_sensor_type();
+	sensor_type_text = sensor_type << 4;
+#endif
+		
 #ifdef DEBUGHOTT
       printer->print(F("Hott Output Module: TX Pin="));
       printer->println(_pinTx);
@@ -159,9 +167,10 @@ void OXS_OUT::sendData() {
         for ( uint8_t i = 0 ; i < TXHOTTDATA_BUFFERSIZE ; i++ ) {       // first fill the buffer with 0 
            TxHottData.txBuffer[i] = 0 ;
         }
-        if ( flagUpdateHottBuffer == HOTT_SENSOR) {        // this flag is set to true when UART get a polling of the GAM device. Then measurement must be filled in the buffer
+        if ( flagUpdateHottBuffer == sensor_type) {        // this flag is set to true when UART get a polling of the GAM device. Then measurement must be filled in the buffer
 			txhottdata_buffersize = TXHOTTDATA_BIN_BUFFERSIZE;
-#if (HOTT_SENSOR == GAM)
+//#if (HOTT_SENSOR == GAM)
+			if (sensor_type == HOTT_TELEMETRY_GAM_SENSOR_ID){
 				  TxHottData.gamMsg.start_byte    = 0x7c ;
 				  TxHottData.gamMsg.gam_sensor_id = HOTT_TELEMETRY_GAM_SENSOR_ID ; //GENRAL AIR MODULE = HOTT_TELEMETRY_GAM_SENSOR_ID
 				  TxHottData.gamMsg.sensor_id     = HOTTV4_GAM_SENSOR_TEXT_ID ;
@@ -276,11 +285,11 @@ void OXS_OUT::sendData() {
 	//  byte general_error_number;            //#41 General Error Number (Voice Error == 12) TODO: more documentation
 	//  byte pressure;                        //#42 High pressure up to 16bar. 0,1bar scale. 20 == 2.0bar
 
-				} 
+			} else if (sensor_type == HOTT_TELEMETRY_EAM_SENSOR_ID){ 
 				
-#endif // End GAM	
+//#endif // End GAM	
 	
-#if (HOTT_SENSOR == EAM)
+//#if (HOTT_SENSOR == EAM)
 				  TxHottData.eamMsg.start_byte    = 0x7c ;
 				  TxHottData.eamMsg.eam_sensor_id = HOTT_TELEMETRY_EAM_SENSOR_ID ; //GENRAL AIR MODULE = HOTT_TELEMETRY_GAM_SENSOR_ID
 				  TxHottData.eamMsg.sensor_id     = HOTTV4_EAM_SENSOR_TEXT_ID ;
@@ -399,281 +408,445 @@ void OXS_OUT::sendData() {
 	//  byte pressure;                        //#42 High pressure up to 16bar. 0,1bar scale. 20 == 2.0bar
 
 				}
-#endif //End EAM
+		}
+//#endif //End EAM
 
 #ifdef HOTT_TEXT
 				
-					else if ((flagUpdateHottBuffer & 0xf0) == HOTT_SENSOR_TEXT){
+					else if ((flagUpdateHottBuffer & 0xf0) == sensor_type_text){
 					txhottdata_buffersize = TXHOTTDATA_TEXT_BUFFERSIZE;
 					TxHottData.txtMsg.start_byte = 0x7b;	//Start Byte always 0x7b
-					TxHottData.txtMsg.esc = HOTT_SENSOR_TEXT & 0xf0;
+					TxHottData.txtMsg.esc = sensor_type_text & 0xf0;
 					TxHottData.txtMsg.stop_byte = 0x7d;	//Stop Byte always 0x7d
 					memset(TxHottData.txtMsg.text, 0x20, HOTT_TEXTMODE_MSG_LEN);
 					
 					byte hott_button = flagUpdateHottBuffer & 0x0f;
 					
-					if ((hott_button == HOTTV4_BUTTON_ESC) && (hott_line_edit == -1) && (hott_page == 1)){
+					if ((hott_button == HOTTV4_BUTTON_ESC) && (hott_line_edit == 255)){
 						TxHottData.txtMsg.esc = 0x01;
 					} else{
-						switch (hott_page) {
+						
+						#ifdef DEBUG
+							Serial.println(hott_button, HEX);
+							Serial.println(hott_line_edit);
+						#endif
+						
+						//select line to edit						
+						if ((hott_button == HOTTV4_BUTTON_INC) && (hott_line_edit == 255))
+							hott_line_select = min(4, hott_line_select +1 );
+						else if ((hott_button == HOTTV4_BUTTON_DEC) && (hott_line_edit == 255))
+							hott_line_select = max(1, hott_line_select -1 );
+						else if ((hott_button == HOTTV4_BUTTON_SET) && (hott_line_edit == 255)){
+							hott_line_edit = hott_line_select;
+							hott_button = 0x0F;									
+						}	//endif select line								
+						
+						//select Parameter to edit
+						if ((hott_button == HOTTV4_BUTTON_INC) && (hott_line_edit == 1)){
+							parameter++;
 							
-							case 1: //Page 1
-							{
-								if ((hott_button == HOTTV4_BUTTON_ENT) && (hott_line_edit == -1)){
-									hott_page++;
-									if (hott_page > HOTT_PAGES)		//Limit maximium Page Number
-										hott_page = HOTT_PAGES;
-								} else if ((hott_button == HOTTV4_BUTTON_ESC) && (hott_line_edit == -1)){
-									hott_page--;
-									if (hott_page < 1)			//Limit minimum Page Number
-										hott_page = 1;
-								}
-								
-								
-								
-								if ((hott_button == HOTTV4_BUTTON_INC) && (hott_line_edit == -1))
-									hott_line_select = min(4, hott_line_select +1 );
-								else if ((hott_button == HOTTV4_BUTTON_DEC) && (hott_line_edit == -1))
-									hott_line_select = max(1, hott_line_select -1 );
-								else if ((hott_button == HOTTV4_BUTTON_SET) && (hott_line_edit == -1)){
-									hott_line_edit = hott_line_select;
-									hott_button = 0x0F;									
-								}									
-								
-								if ((hott_button == HOTTV4_BUTTON_INC) && (hott_line_edit == 1)){
-									hott_eeprom_rw.write_sensor_type(min(HOTT_TELEMETRY_EAM_SENSOR_ID, (hott_eeprom_rw.get_sensor_type() + 1)));										
-								} else if ((hott_button == HOTTV4_BUTTON_DEC) && (hott_line_edit == 1)){
-									hott_eeprom_rw.write_sensor_type(max(HOTT_TELEMETRY_GAM_SENSOR_ID, (hott_eeprom_rw.get_sensor_type() - 1)));										
-								} else if ((hott_button == HOTTV4_BUTTON_SET) && (hott_line_edit == 1)){
-									hott_line_edit = -1;
-									hott_eeprom_rw.write_eeprom();
-								}
-								
-								if ((hott_button == HOTTV4_BUTTON_INC) && (hott_line_edit == 2)){
-									hott_eeprom_rw.write_voltage_coef(min(1000.0f, (hott_eeprom_rw.get_voltage_coef() + 0.1f)));										
-								}
-								else if ((hott_button == HOTTV4_BUTTON_DEC) && (hott_line_edit == 2)){
-									hott_eeprom_rw.write_voltage_coef(max(1.0f, (hott_eeprom_rw.get_voltage_coef() - 0.1f)));										
-								}
-								else if ((hott_button == HOTTV4_BUTTON_ENT) && (hott_line_edit == 2)){
-									hott_eeprom_rw.write_voltage_coef(min(1000.0f, (hott_eeprom_rw.get_voltage_coef() + 5.0f)));							
-								}
-								else if ((hott_button == HOTTV4_BUTTON_ESC) && (hott_line_edit == 2)){
-									hott_eeprom_rw.write_voltage_coef(max(1.0f, (hott_eeprom_rw.get_voltage_coef() - 5.0f)));								
-								}
-								else if ((hott_button == HOTTV4_BUTTON_SET) && (hott_line_edit == 2)){
-									hott_line_edit = -1;
-									hott_eeprom_rw.write_eeprom();
-								}
-								
-								if ((hott_button == HOTTV4_BUTTON_INC) && (hott_line_edit == 3)){
-									hott_eeprom_rw.write_current_coef(min(1000.0f, (hott_eeprom_rw.get_current_coef() + 0.1f)));										
-								}
-								else if ((hott_button == HOTTV4_BUTTON_DEC) && (hott_line_edit == 3)){
-									hott_eeprom_rw.write_current_coef(max(1.0f, (hott_eeprom_rw.get_current_coef() - 0.1f)));										
-								}
-								else if ((hott_button == HOTTV4_BUTTON_ENT) && (hott_line_edit == 3)){
-									hott_eeprom_rw.write_current_coef(min(1000.0f, (hott_eeprom_rw.get_current_coef() + 5.0f)));							
-								}
-								else if ((hott_button == HOTTV4_BUTTON_ESC) && (hott_line_edit == 3)){
-									hott_eeprom_rw.write_current_coef(max(1.0f, (hott_eeprom_rw.get_current_coef() - 5.0f)));								
-								}
-								else if ((hott_button == HOTTV4_BUTTON_SET) && (hott_line_edit == 3)){
-									hott_line_edit = -1;
-									hott_eeprom_rw.write_eeprom();
-								}
-								
-								if ((hott_button == HOTTV4_BUTTON_INC) && (hott_line_edit == 4)){
-									hott_eeprom_rw.write_current_offset(min(1000, (hott_eeprom_rw.get_current_offset() + 1)));										
-								}
-								else if ((hott_button == HOTTV4_BUTTON_DEC) && (hott_line_edit == 4)){
-									hott_eeprom_rw.write_current_offset(max(-1000, (hott_eeprom_rw.get_current_offset() - 1)));										
-								}
-								else if ((hott_button == HOTTV4_BUTTON_ENT) && (hott_line_edit == 4)){
-									hott_eeprom_rw.write_current_offset(min(1000, (hott_eeprom_rw.get_current_offset() + 10)));							
-								}
-								else if ((hott_button == HOTTV4_BUTTON_ESC) && (hott_line_edit == 4)){
-									hott_eeprom_rw.write_current_offset(max(-1000, (hott_eeprom_rw.get_current_offset() - 10)));								
-								}
-								else if ((hott_button == HOTTV4_BUTTON_SET) && (hott_line_edit == 4)){
-									hott_line_edit = -1;
-									hott_eeprom_rw.write_eeprom();
-								}
-								
-								
-								
-								//Line 1
-								TxHottData.txtMsg.text[0][0] = 'C';
-								TxHottData.txtMsg.text[0][1] = 'u';
-								TxHottData.txtMsg.text[0][2] = 'r';
-								TxHottData.txtMsg.text[0][3] = 'r';
-								TxHottData.txtMsg.text[0][4] = 'a';
-								TxHottData.txtMsg.text[0][5] = 'l';
-								TxHottData.txtMsg.text[0][6] = 't';
-								//TxHottData.txtMsg.text[0][7] = ' ';
-								TxHottData.txtMsg.text[0][8] = 'o';
-								TxHottData.txtMsg.text[0][9] = 'X';
-								TxHottData.txtMsg.text[0][10] = 's';
-								//TxHottData.txtMsg.text[0][11] = ' ';
-								TxHottData.txtMsg.text[0][12] = 'v';
-								TxHottData.txtMsg.text[0][13] = '0';
-								TxHottData.txtMsg.text[0][14] = '.';
-								TxHottData.txtMsg.text[0][15] = '0';
-								TxHottData.txtMsg.text[0][16] = '1';
-								//TxHottData.txtMsg.text[0][18] = ' ';
-								TxHottData.txtMsg.text[0][19] = '<';
-								TxHottData.txtMsg.text[0][20] = '>';
-								
-								//Line 2
-								//TxHottData.txtMsg.text[1][0] = ' ';
-								//TxHottData.txtMsg.text[1][1] = ' ';
-								TxHottData.txtMsg.text[1][2] = 'S';
-								TxHottData.txtMsg.text[1][3] = 'e';
-								TxHottData.txtMsg.text[1][4] = 'n';
-								TxHottData.txtMsg.text[1][5] = 's';
-								TxHottData.txtMsg.text[1][6] = 'o';
-								TxHottData.txtMsg.text[1][7] = 'r';
-								//TxHottData.txtMsg.text[1][8] = ' ';
-								TxHottData.txtMsg.text[1][9] = 'T';
-								TxHottData.txtMsg.text[1][10] = 'y';
-								TxHottData.txtMsg.text[1][11] = 'p';
-								TxHottData.txtMsg.text[1][12] = 'e';
-								TxHottData.txtMsg.text[1][13] = ':';
-								if (hott_eeprom_rw.get_sensor_type() == HOTT_TELEMETRY_GAM_SENSOR_ID){
-									TxHottData.txtMsg.text[1][15] = 'G';
-									TxHottData.txtMsg.text[1][16] = 'A';
-									TxHottData.txtMsg.text[1][17] = 'M';
-								} else if (hott_eeprom_rw.get_sensor_type() == HOTT_TELEMETRY_EAM_SENSOR_ID){
-									TxHottData.txtMsg.text[1][15] = 'E';
-									TxHottData.txtMsg.text[1][16] = 'A';
-									TxHottData.txtMsg.text[1][17] = 'M';
-								} else {
-									TxHottData.txtMsg.text[1][15] = '-';
-									TxHottData.txtMsg.text[1][16] = '-';
-									TxHottData.txtMsg.text[1][17] = '-';
-								}
-								//TxHottData.txtMsg.text[1][18] = ' ';
-								//TxHottData.txtMsg.text[1][19] = ' ';
-								//TxHottData.txtMsg.text[1][20] = ' ';								
-								
-								//Line 3
-								//TxHottData.txtMsg.text[2][0] = ' ';
-								//TxHottData.txtMsg.text[2][1] = ' ';
-								TxHottData.txtMsg.text[2][2] = 'V';
-								TxHottData.txtMsg.text[2][3] = '_';
-								TxHottData.txtMsg.text[2][4] = 'c';
-								TxHottData.txtMsg.text[2][5] = 'o';
-								TxHottData.txtMsg.text[2][6] = 'e';
-								TxHottData.txtMsg.text[2][7] = 'f';
-								TxHottData.txtMsg.text[2][8] = '.';
-								TxHottData.txtMsg.text[2][9] = ':';
-								//TxHottData.txtMsg.text[2][10] = ' ';
-								dtostrf(hott_eeprom_rw.get_voltage_coef(), 5, 1,  TxHottData.txtMsg.text[2]+12);
-								TxHottData.txtMsg.text[2][17] = 'm';
-								TxHottData.txtMsg.text[2][18] = 'V';
-								TxHottData.txtMsg.text[2][19] = '/';
-								TxHottData.txtMsg.text[2][20] = 'V';
-								
-								//Line 4
-								//TxHottData.txtMsg.text[3][0] = ' ';
-								//TxHottData.txtMsg.text[3][1] = ' ';
-								TxHottData.txtMsg.text[3][2] = 'A';
-								TxHottData.txtMsg.text[3][3] = '_';
-								TxHottData.txtMsg.text[3][4] = 'c';
-								TxHottData.txtMsg.text[3][5] = 'o';
-								TxHottData.txtMsg.text[3][6] = 'e';
-								TxHottData.txtMsg.text[3][7] = 'f';
-								TxHottData.txtMsg.text[3][8] = '.';
-								TxHottData.txtMsg.text[3][9] = ':';
-								//TxHottData.txtMsg.text[3][10] = ' ';
-								dtostrf(hott_eeprom_rw.get_current_coef(), 5, 1,  TxHottData.txtMsg.text[3]+12);
-								TxHottData.txtMsg.text[3][17] = 'm';
-								TxHottData.txtMsg.text[3][18] = 'V';
-								TxHottData.txtMsg.text[3][19] = '/';
-								TxHottData.txtMsg.text[3][20] = 'A';
-								
-								//Line 5
-								//TxHottData.txtMsg.text[4][0] = ' ';
-								//TxHottData.txtMsg.text[4][1] = ' ';
-								TxHottData.txtMsg.text[4][2] = 'A';
-								TxHottData.txtMsg.text[4][3] = '_';
-								TxHottData.txtMsg.text[4][4] = 'o';
-								TxHottData.txtMsg.text[4][5] = 'f';
-								TxHottData.txtMsg.text[4][6] = 'f';
-								TxHottData.txtMsg.text[4][7] = 's';
-								TxHottData.txtMsg.text[4][8] = '.';
-								TxHottData.txtMsg.text[4][9] = ':';
-								//TxHottData.txtMsg.text[4][10] = ' ';
-								dtostrf(hott_eeprom_rw.get_current_offset(), 5, 1,  TxHottData.txtMsg.text[4]+12);
-								TxHottData.txtMsg.text[4][17] = 'm';
-								TxHottData.txtMsg.text[4][18] = 'V';
-								//TxHottData.txtMsg.text[4][19] = ' ';
-								//TxHottData.txtMsg.text[4][20] = ' ';
-								
-								//Line 6
-								//TxHottData.txtMsg.text[5][0] = ' ';
-								//TxHottData.txtMsg.text[5][1] = ' ';
-								TxHottData.txtMsg.text[5][2] = 'V';
-								TxHottData.txtMsg.text[5][3] = 'o';
-								TxHottData.txtMsg.text[5][4] = 'l';
-								TxHottData.txtMsg.text[5][5] = 't';
-								TxHottData.txtMsg.text[5][6] = 'a';
-								TxHottData.txtMsg.text[5][7] = 'g';
-								TxHottData.txtMsg.text[5][8] = 'e';
-								TxHottData.txtMsg.text[5][9] = ':';
-								//TxHottData.txtMsg.text[5][10] = ' ';
-								dtostrf((voltageData->mVolt[MAIN_BATTERY_SOURCE - VOLT_1].value / 1000.0f), 5, 2,  TxHottData.txtMsg.text[5]+12);     //battery 1 voltage  in mV
-								TxHottData.txtMsg.text[5][17] = 'V';
-								//TxHottData.txtMsg.text[5][14] = ' ';
-								//TxHottData.txtMsg.text[5][19] = ' ';
-								//TxHottData.txtMsg.text[5][20] = ' ';	
-
-								//Line 7
-								//TxHottData.txtMsg.text[6][0] = ' ';
-								//TxHottData.txtMsg.text[6][1] = ' ';
-								TxHottData.txtMsg.text[6][2] = 'C';
-								TxHottData.txtMsg.text[6][3] = 'u';
-								TxHottData.txtMsg.text[6][4] = 'r';
-								TxHottData.txtMsg.text[6][5] = 'r';
-								TxHottData.txtMsg.text[6][6] = 'e';
-								TxHottData.txtMsg.text[6][7] = 'n';
-								TxHottData.txtMsg.text[6][8] = 't';
-								TxHottData.txtMsg.text[6][9] = ':';
-								//TxHottData.txtMsg.text[6][10] = ' ';
-								dtostrf((currentData->milliAmps.value / 1000.f), 5, 2,  TxHottData.txtMsg.text[6]+12);     //battery 1 voltage  in mV
-								TxHottData.txtMsg.text[6][17] = 'A';
-								//TxHottData.txtMsg.text[6][14] = ' ';
-								//TxHottData.txtMsg.text[6][19] = ' ';
-								//TxHottData.txtMsg.text[6][20] = ' ';	
-								
-								//Line 8
-								TxHottData.txtMsg.text[7][0] = 'I';
-								TxHottData.txtMsg.text[7][1] = 'n';
-								TxHottData.txtMsg.text[7][2] = 'p';
-								TxHottData.txtMsg.text[7][3] = 'u';
-								TxHottData.txtMsg.text[7][4] = 't';
-								//TxHottData.txtMsg.text[7][5] = ' ';
-								TxHottData.txtMsg.text[7][6] = 'S';
-								TxHottData.txtMsg.text[7][7] = 'e';
-								TxHottData.txtMsg.text[7][8] = 't';
-								TxHottData.txtMsg.text[7][9] = 'u';
-								TxHottData.txtMsg.text[7][10] = 'p';
-								//TxHottData.txtMsg.text[7][11] = ' ';
-								TxHottData.txtMsg.text[7][13] = 'P';
-								TxHottData.txtMsg.text[7][14] = 'a';
-								TxHottData.txtMsg.text[7][15] = 'g';
-								TxHottData.txtMsg.text[7][16] = 'e';
-								//TxHottData.txtMsg.text[7][17] = ' ';
-								TxHottData.txtMsg.text[7][18] = '1';
-								TxHottData.txtMsg.text[7][19] = '/';
-								TxHottData.txtMsg.text[7][20] = '1';
-								
-								TxHottData.txtMsg.text[hott_line_select][0] = '>';
-								invert_line(hott_line_edit);
-								
-							break;
+							if (parameter > 7){				//parameter never over 7 (VOLT_1...VOLT_6, CURR, SENSOR)
+								parameter = 0;
+							}
+							
+						} else if ((hott_button == HOTTV4_BUTTON_DEC) && (hott_line_edit == 1)){
+							parameter--;
+							
+							if (parameter == 255){				//parameter never under 0(=255) (VOLT_1...VOLT_6, CURR, SENSOR)
+								parameter = 7;
+							}										
+						} else if ((hott_button == HOTTV4_BUTTON_SET) && (hott_line_edit == 1)){
+							hott_line_edit = -1;
+						} //endif select parameter
+						
+						//edit VOLT_1 ... VOLT_6 Voltage Pin
+						if ((hott_button == HOTTV4_BUTTON_INC) && (hott_line_edit == 2) && (parameter < 6)){
+							hott_eeprom_rw.write_voltage_pin(parameter, hott_eeprom_rw.get_voltage_pin(parameter) + 1);	
+							
+							if (hott_eeprom_rw.get_voltage_pin(parameter) == 4){		//Pin A4 and A5 used for I2C
+								hott_eeprom_rw.write_voltage_pin(parameter, 6);
+							} else if (hott_eeprom_rw.get_voltage_pin(parameter) > 8){
+								hott_eeprom_rw.write_voltage_pin(parameter, 0);
+							}
+						}
+						else if ((hott_button == HOTTV4_BUTTON_DEC) && (hott_line_edit == 2) && (parameter < 6)){
+							hott_eeprom_rw.write_voltage_pin(parameter, hott_eeprom_rw.get_voltage_pin(parameter) - 1);	
+							
+							if (hott_eeprom_rw.get_voltage_pin(parameter) == 5){		//Pin A4 and A5 used for I2C
+								hott_eeprom_rw.write_voltage_pin(parameter, 3);
+							} else if (hott_eeprom_rw.get_voltage_pin(parameter) < 0){
+								hott_eeprom_rw.write_voltage_pin(parameter, 8);
 							}							
 						}
+						else if ((hott_button == HOTTV4_BUTTON_SET) && (hott_line_edit == 2)){
+							hott_line_edit = -1;
+							hott_eeprom_rw.write_eeprom();
+						} //endif VOLT_1 ... VOLT_6 Voltage Pin
+						
+						//edit VOLT_1 ... VOLT_6 Voltage Scale
+						if ((hott_button == HOTTV4_BUTTON_INC) && (hott_line_edit == 3) && (parameter < 6)){
+							hott_eeprom_rw.write_voltage_coef(parameter, min(1000.0f, (hott_eeprom_rw.get_voltage_coef(parameter) + 0.1f)));										
+						}
+						else if ((hott_button == HOTTV4_BUTTON_DEC) && (hott_line_edit == 3) && (parameter < 6)){
+							hott_eeprom_rw.write_voltage_coef(parameter, max(1.0f, (hott_eeprom_rw.get_voltage_coef(parameter) - 0.1f)));										
+						}
+						else if ((hott_button == HOTTV4_BUTTON_ENT) && (hott_line_edit == 3) && (parameter < 6)){
+							hott_eeprom_rw.write_voltage_coef(parameter, min(1000.0f, (hott_eeprom_rw.get_voltage_coef(parameter) + 5.0f)));							
+						}
+						else if ((hott_button == HOTTV4_BUTTON_ESC) && (hott_line_edit == 3) && (parameter < 6)){
+							hott_eeprom_rw.write_voltage_coef(parameter, max(1.0f, (hott_eeprom_rw.get_voltage_coef(parameter) - 5.0f)));								
+						}
+						else if ((hott_button == HOTTV4_BUTTON_SET) && (hott_line_edit == 3)){
+							hott_line_edit = -1;
+							hott_eeprom_rw.write_eeprom();
+						}	//endif VOLT_1 ... VOLT_6 Voltage Scale
+						
+						
+						//edit VOLT_1 ... VOLT_6 Voltage Offset
+						if ((hott_button == HOTTV4_BUTTON_INC) && (hott_line_edit == 4) && (parameter < 6)){
+							hott_eeprom_rw.write_voltage_offset(parameter, min(1000, (hott_eeprom_rw.get_voltage_offset(parameter) + 1)));										
+						}
+						else if ((hott_button == HOTTV4_BUTTON_DEC) && (hott_line_edit == 4) && (parameter < 6)){
+							hott_eeprom_rw.write_voltage_offset(parameter, max(0, (hott_eeprom_rw.get_voltage_offset(parameter) - 1)));										
+						}
+						else if ((hott_button == HOTTV4_BUTTON_ENT) && (hott_line_edit == 4) && (parameter < 6)){
+							hott_eeprom_rw.write_voltage_offset(parameter, min(1000, (hott_eeprom_rw.get_voltage_offset(parameter) + 20)));							
+						}
+						else if ((hott_button == HOTTV4_BUTTON_ESC) && (hott_line_edit == 4) && (parameter < 6)){
+							hott_eeprom_rw.write_voltage_offset(parameter, max(0, (hott_eeprom_rw.get_voltage_offset(parameter) - 20)));								
+						}
+						else if ((hott_button == HOTTV4_BUTTON_SET) && (hott_line_edit == 4)){
+							hott_line_edit = -1;
+							hott_eeprom_rw.write_eeprom();
+						}	//endif VOLT_1 ... VOLT_6 Voltage Offset
+						
+						
+						//edit Current Pin
+						if ((hott_button == HOTTV4_BUTTON_INC) && (hott_line_edit == 2) && (parameter == 6)){
+							hott_eeprom_rw.write_current_pin(hott_eeprom_rw.get_current_pin() + 1);	
+							
+							if (hott_eeprom_rw.get_current_pin() == 4){		//Pin A4 and A5 used for I2C
+								hott_eeprom_rw.write_current_pin(6);
+							} else if (hott_eeprom_rw.get_current_pin() > 8){
+								hott_eeprom_rw.write_current_pin(0);
+							}
+						}
+						else if ((hott_button == HOTTV4_BUTTON_DEC) && (hott_line_edit == 2) && (parameter == 6)){
+							hott_eeprom_rw.write_current_pin(hott_eeprom_rw.get_current_pin() - 1);	
+							
+							if (hott_eeprom_rw.get_current_pin() == 5){		//Pin A4 and A5 used for I2C
+								hott_eeprom_rw.write_current_pin(3);
+							} else if (hott_eeprom_rw.get_current_pin() < 0){
+								hott_eeprom_rw.write_current_pin(8);
+							}							
+						}
+						else if ((hott_button == HOTTV4_BUTTON_SET) && (hott_line_edit == 2)){
+							hott_line_edit = -1;
+							hott_eeprom_rw.write_eeprom();
+						} //endif Current Pin
+						
+						//edit Current Scale
+						if ((hott_button == HOTTV4_BUTTON_INC) && (hott_line_edit == 3) && (parameter == 6)){
+							hott_eeprom_rw.write_current_coef(min(1000.0f, (hott_eeprom_rw.get_current_coef() + 0.1f)));										
+						}
+						else if ((hott_button == HOTTV4_BUTTON_DEC) && (hott_line_edit == 3) && (parameter == 6)){
+							hott_eeprom_rw.write_current_coef(max(1.0f, (hott_eeprom_rw.get_current_coef() - 0.1f)));										
+						}
+						else if ((hott_button == HOTTV4_BUTTON_ENT) && (hott_line_edit == 3) && (parameter == 6)){
+							hott_eeprom_rw.write_current_coef(min(1000.0f, (hott_eeprom_rw.get_current_coef() + 5.0f)));							
+						}
+						else if ((hott_button == HOTTV4_BUTTON_ESC) && (hott_line_edit == 3) && (parameter == 6)){
+							hott_eeprom_rw.write_current_coef(max(1.0f, (hott_eeprom_rw.get_current_coef() - 5.0f)));								
+						}
+						else if ((hott_button == HOTTV4_BUTTON_SET) && (hott_line_edit == 3)){
+							hott_line_edit = -1;
+							hott_eeprom_rw.write_eeprom();
+						}	//endif Current Scale
+						
+						
+						//edit Current Offset
+						if ((hott_button == HOTTV4_BUTTON_INC) && (hott_line_edit == 4) && (parameter == 6)){
+							hott_eeprom_rw.write_current_offset(min(1000, (hott_eeprom_rw.get_current_offset() + 1)));										
+						}
+						else if ((hott_button == HOTTV4_BUTTON_DEC) && (hott_line_edit == 4) && (parameter == 6)){
+							hott_eeprom_rw.write_current_offset(max(0, (hott_eeprom_rw.get_current_offset() - 1)));										
+						}
+						else if ((hott_button == HOTTV4_BUTTON_ENT) && (hott_line_edit == 4) && (parameter == 6)){
+							hott_eeprom_rw.write_current_offset(min(1000, (hott_eeprom_rw.get_current_offset() + 20)));							
+						}
+						else if ((hott_button == HOTTV4_BUTTON_ESC) && (hott_line_edit == 4) && (parameter == 6)){
+							hott_eeprom_rw.write_current_offset(max(0, (hott_eeprom_rw.get_current_offset() - 20)));								
+						}
+						else if ((hott_button == HOTTV4_BUTTON_SET) && (hott_line_edit == 4)){
+							hott_line_edit = -1;
+							hott_eeprom_rw.write_eeprom();
+						}	//endif Current Offset
+						
+						//edit Sensot Type
+						if ((hott_button == HOTTV4_BUTTON_INC) && (hott_line_edit == 2) && (parameter == 7)){
+							hott_eeprom_rw.write_sensor_type(hott_eeprom_rw.get_sensor_type() + 1);
+							
+							if (hott_eeprom_rw.get_sensor_type() > 0x8E){
+								hott_eeprom_rw.write_sensor_type(0x8D);
+							}							
+						} else if ((hott_button == HOTTV4_BUTTON_DEC) && (hott_line_edit == 2) && (parameter == 7)){
+							hott_eeprom_rw.write_sensor_type(hott_eeprom_rw.get_sensor_type() - 1);
+							
+							if (hott_eeprom_rw.get_sensor_type() < 0x8D){
+								hott_eeprom_rw.write_sensor_type(0x8E);
+							}
+						}
+						
+						//Line 1
+						TxHottData.txtMsg.text[0][0] = 'C';
+						TxHottData.txtMsg.text[0][1] = 'u';
+						TxHottData.txtMsg.text[0][2] = 'r';
+						TxHottData.txtMsg.text[0][3] = 'r';
+						TxHottData.txtMsg.text[0][4] = 'a';
+						TxHottData.txtMsg.text[0][5] = 'l';
+						TxHottData.txtMsg.text[0][6] = 't';
+						//TxHottData.txtMsg.text[0][7] = ' ';
+						TxHottData.txtMsg.text[0][8] = 'o';
+						TxHottData.txtMsg.text[0][9] = 'X';
+						TxHottData.txtMsg.text[0][10] = 's';
+						//TxHottData.txtMsg.text[0][11] = ' ';
+						TxHottData.txtMsg.text[0][12] = 'v';
+						TxHottData.txtMsg.text[0][13] = '0';
+						TxHottData.txtMsg.text[0][14] = '.';
+						TxHottData.txtMsg.text[0][15] = '0';
+						TxHottData.txtMsg.text[0][16] = '2';
+						//TxHottData.txtMsg.text[0][18] = ' ';
+						TxHottData.txtMsg.text[0][19] = '<';
+						TxHottData.txtMsg.text[0][20] = '>';
+						
+						//Line 2
+						//TxHottData.txtMsg.text[1][0] = ' ';
+						//TxHottData.txtMsg.text[1][1] = ' ';
+						TxHottData.txtMsg.text[1][2] = 'P';
+						TxHottData.txtMsg.text[1][3] = 'a';
+						TxHottData.txtMsg.text[1][4] = 'r';
+						TxHottData.txtMsg.text[1][5] = 'a';
+						TxHottData.txtMsg.text[1][6] = 'm';
+						TxHottData.txtMsg.text[1][7] = 'e';
+						TxHottData.txtMsg.text[1][8] = 't';
+						TxHottData.txtMsg.text[1][9] = 'e';
+						TxHottData.txtMsg.text[1][10] = 'r';
+						TxHottData.txtMsg.text[1][11] = ':';
+						//TxHottData.txtMsg.text[1][12] = ' ';
+						
+						if (parameter < 6){							//VOLT_1 ... VOLT_6
+							TxHottData.txtMsg.text[1][13] = 'V';
+							TxHottData.txtMsg.text[1][14] = 'O';
+							TxHottData.txtMsg.text[1][15] = 'L';
+							TxHottData.txtMsg.text[1][16] = 'T';
+							TxHottData.txtMsg.text[1][17] = '_';
+							TxHottData.txtMsg.text[1][18] = '1' + parameter;				//parameter = 0 -> 1, parameter = 1 -> 2....
+
+							//Line 3
+							//TxHottData.txtMsg.text[2][0] = ' ';
+							//TxHottData.txtMsg.text[2][1] = ' ';
+							TxHottData.txtMsg.text[2][2] = 'I';
+							TxHottData.txtMsg.text[2][3] = 'n';
+							TxHottData.txtMsg.text[2][4] = 'p';
+							TxHottData.txtMsg.text[2][5] = 'u';
+							TxHottData.txtMsg.text[2][6] = 't';
+							TxHottData.txtMsg.text[2][7] = ' ';
+							TxHottData.txtMsg.text[2][8] = 'P';
+							TxHottData.txtMsg.text[2][9] = 'i';
+							TxHottData.txtMsg.text[2][10] = 'n';
+							TxHottData.txtMsg.text[2][11] = ':';
+							//TxHottData.txtMsg.text[2][12] = ' ';
+							if (hott_eeprom_rw.get_voltage_pin(parameter) < 8){
+								TxHottData.txtMsg.text[2][13] = 'A';
+								TxHottData.txtMsg.text[2][14] = '0' + hott_eeprom_rw.get_voltage_pin(parameter);
+							} else {
+								hott_eeprom_rw.write_voltage_pin(parameter, 0x08);
+								TxHottData.txtMsg.text[2][13] = 'O';
+								TxHottData.txtMsg.text[2][14] = 'F';
+								TxHottData.txtMsg.text[2][15] = 'F';
+							}
+							
+							
+							//Line 4
+							//TxHottData.txtMsg.text[3][0] = ' ';
+							//TxHottData.txtMsg.text[3][1] = ' ';
+							//TxHottData.txtMsg.text[3][2] = ' ';
+							TxHottData.txtMsg.text[3][3] = 'S';
+							TxHottData.txtMsg.text[3][4] = 'c';
+							TxHottData.txtMsg.text[3][5] = 'a';
+							TxHottData.txtMsg.text[3][6] = 'l';
+							TxHottData.txtMsg.text[3][7] = 'e';
+							TxHottData.txtMsg.text[3][8] = ':';
+							TxHottData.txtMsg.text[3][9] = ' ';
+							dtostrf(hott_eeprom_rw.get_voltage_coef(parameter), 5, 1,  TxHottData.txtMsg.text[3]+10);
+							TxHottData.txtMsg.text[3][15] = ' ';
+							TxHottData.txtMsg.text[3][16] = 'm';
+							TxHottData.txtMsg.text[3][17] = 'V';
+							TxHottData.txtMsg.text[3][18] = '/';
+							TxHottData.txtMsg.text[3][19] = 'V';
+							
+							//Line 5
+							//TxHottData.txtMsg.text[4][0] = ' ';
+							//TxHottData.txtMsg.text[4][1] = ' ';
+							TxHottData.txtMsg.text[4][2] = 'O';
+							TxHottData.txtMsg.text[4][3] = 'f';
+							TxHottData.txtMsg.text[4][4] = 'f';
+							TxHottData.txtMsg.text[4][5] = 's';
+							TxHottData.txtMsg.text[4][6] = 'e';
+							TxHottData.txtMsg.text[4][7] = 't';
+							TxHottData.txtMsg.text[4][8] = ':';
+							TxHottData.txtMsg.text[4][9] = ' ';
+							dtostrf(hott_eeprom_rw.get_voltage_offset(parameter), 5, 0,  TxHottData.txtMsg.text[4]+10);
+							TxHottData.txtMsg.text[4][15] = ' ';
+							TxHottData.txtMsg.text[4][16] = 'm';
+							TxHottData.txtMsg.text[4][17] = 'V';
+							//TxHottData.txtMsg.text[4][19] = ' ';
+							//TxHottData.txtMsg.text[4][20] = ' ';
+							
+							//Line 6
+							//TxHottData.txtMsg.text[5][0] = ' ';
+							//TxHottData.txtMsg.text[5][1] = ' ';
+							TxHottData.txtMsg.text[5][2] = 'V';
+							TxHottData.txtMsg.text[5][3] = 'o';
+							TxHottData.txtMsg.text[5][4] = 'l';
+							TxHottData.txtMsg.text[5][5] = 't';
+							TxHottData.txtMsg.text[5][6] = 'a';
+							TxHottData.txtMsg.text[5][7] = 'g';
+							TxHottData.txtMsg.text[5][8] = 'e';
+							TxHottData.txtMsg.text[5][9] = ':';
+							//TxHottData.txtMsg.text[5][10] = ' ';
+							dtostrf((voltageData->mVolt[MAIN_BATTERY_SOURCE - VOLT_1].value / 1000.0f), 5, 2,  TxHottData.txtMsg.text[5]+11);     //battery 1 voltage  in mV
+							TxHottData.txtMsg.text[5][17] = 'V';
+							//TxHottData.txtMsg.text[5][14] = ' ';
+							//TxHottData.txtMsg.text[5][19] = ' ';
+							//TxHottData.txtMsg.text[5][20] = ' ';				
+						
+						}	//endif VOLT_1 ... VOLT_6
+						
+						else if (parameter == 6) {					//Current
+							TxHottData.txtMsg.text[1][13] = 'C';
+							TxHottData.txtMsg.text[1][14] = 'U';
+							TxHottData.txtMsg.text[1][15] = 'R';
+							TxHottData.txtMsg.text[1][16] = 'R';
+							
+							//Line 3
+							//TxHottData.txtMsg.text[2][0] = ' ';
+							//TxHottData.txtMsg.text[2][1] = ' ';
+							TxHottData.txtMsg.text[2][2] = 'I';
+							TxHottData.txtMsg.text[2][3] = 'n';
+							TxHottData.txtMsg.text[2][4] = 'p';
+							TxHottData.txtMsg.text[2][5] = 'u';
+							TxHottData.txtMsg.text[2][6] = 't';
+							TxHottData.txtMsg.text[2][7] = ' ';
+							TxHottData.txtMsg.text[2][8] = 'P';
+							TxHottData.txtMsg.text[2][9] = 'i';
+							TxHottData.txtMsg.text[2][10] = 'n';
+							TxHottData.txtMsg.text[2][11] = ':';
+							//TxHottData.txtMsg.text[2][12] = ' ';
+							
+							if (hott_eeprom_rw.get_current_pin() < 8){
+								TxHottData.txtMsg.text[2][13] = 'A';
+								TxHottData.txtMsg.text[2][14] = '0' + hott_eeprom_rw.get_current_pin();
+							} else{
+								hott_eeprom_rw.write_current_pin(0x08);
+								TxHottData.txtMsg.text[2][13] = 'O';
+								TxHottData.txtMsg.text[2][14] = 'F';
+								TxHottData.txtMsg.text[2][15] = 'F';
+							}
+								
+							
+							//Line 4
+							//TxHottData.txtMsg.text[3][0] = ' ';
+							//TxHottData.txtMsg.text[3][1] = ' ';
+							//TxHottData.txtMsg.text[3][2] = ' ';
+							TxHottData.txtMsg.text[3][3] = 'S';
+							TxHottData.txtMsg.text[3][4] = 'c';
+							TxHottData.txtMsg.text[3][5] = 'a';
+							TxHottData.txtMsg.text[3][6] = 'l';
+							TxHottData.txtMsg.text[3][7] = 'e';
+							TxHottData.txtMsg.text[3][8] = ':';
+							TxHottData.txtMsg.text[3][9] = ' ';
+							dtostrf(hott_eeprom_rw.get_current_coef(), 5, 1,  TxHottData.txtMsg.text[3]+10);
+							//TxHottData.txtMsg.text[3][16] = ' ';
+							TxHottData.txtMsg.text[3][17] = 'm';
+							TxHottData.txtMsg.text[3][18] = 'V';
+							TxHottData.txtMsg.text[3][19] = '/';
+							TxHottData.txtMsg.text[3][20] = 'A';
+							
+							//Line 5
+							//TxHottData.txtMsg.text[4][0] = ' ';
+							//TxHottData.txtMsg.text[4][1] = ' ';
+							TxHottData.txtMsg.text[4][2] = 'O';
+							TxHottData.txtMsg.text[4][3] = 'f';
+							TxHottData.txtMsg.text[4][4] = 'f';
+							TxHottData.txtMsg.text[4][5] = 's';
+							TxHottData.txtMsg.text[4][6] = 'e';
+							TxHottData.txtMsg.text[4][7] = 't';
+							TxHottData.txtMsg.text[4][8] = ':';
+							TxHottData.txtMsg.text[4][9] = ' ';
+							dtostrf(hott_eeprom_rw.get_current_offset(), 5, 0,  TxHottData.txtMsg.text[4]+10);
+							//TxHottData.txtMsg.text[4][16] = ' ';
+							TxHottData.txtMsg.text[4][17] = 'm';
+							TxHottData.txtMsg.text[4][18] = 'V';
+							//TxHottData.txtMsg.text[4][19] = ' ';
+							//TxHottData.txtMsg.text[4][20] = ' ';
+							
+							//Line 6
+							//TxHottData.txtMsg.text[5][0] = ' ';
+							//TxHottData.txtMsg.text[5][1] = ' ';
+							TxHottData.txtMsg.text[5][2] = 'C';
+							TxHottData.txtMsg.text[5][3] = 'u';
+							TxHottData.txtMsg.text[5][4] = 'r';
+							TxHottData.txtMsg.text[5][5] = 'r';
+							TxHottData.txtMsg.text[5][6] = 'e';
+							TxHottData.txtMsg.text[5][7] = 'n';
+							TxHottData.txtMsg.text[5][8] = 't';
+							TxHottData.txtMsg.text[5][9] = ':';
+							//TxHottData.txtMsg.text[5][10] = ' ';
+							dtostrf((currentData->milliAmps.value) / 1000.0f, 5, 2,  TxHottData.txtMsg.text[5]+11);     //battery 1 voltage  in mV
+							TxHottData.txtMsg.text[5][17] = 'A';
+							//TxHottData.txtMsg.text[5][14] = ' ';
+							//TxHottData.txtMsg.text[5][19] = ' ';
+							//TxHottData.txtMsg.text[5][20] = ' ';	
+							
+						}				//endif Current 
+						else if (parameter == 7){		//Sensor Type
+							TxHottData.txtMsg.text[1][13] = 'S';
+							TxHottData.txtMsg.text[1][14] = 'E';
+							TxHottData.txtMsg.text[1][15] = 'N';
+							TxHottData.txtMsg.text[1][16] = 'S';
+							TxHottData.txtMsg.text[1][17] = 'O';
+							TxHottData.txtMsg.text[1][18] = 'R';
+							
+							//Line 3
+							TxHottData.txtMsg.text[2][5] = 'T';
+							TxHottData.txtMsg.text[2][6] = 'y';
+							TxHottData.txtMsg.text[2][7] = 'p';
+							TxHottData.txtMsg.text[2][8] = 'e';
+							TxHottData.txtMsg.text[2][9] = ':';
+							
+							if (hott_eeprom_rw.get_sensor_type() == HOTT_TELEMETRY_GAM_SENSOR_ID){
+								TxHottData.txtMsg.text[2][11] = 'G';
+								TxHottData.txtMsg.text[2][12] = 'A';
+								TxHottData.txtMsg.text[2][13] = 'M';
+							} else if (hott_eeprom_rw.get_sensor_type() == HOTT_TELEMETRY_EAM_SENSOR_ID){
+								TxHottData.txtMsg.text[2][11] = 'E';
+								TxHottData.txtMsg.text[2][12] = 'A';
+								TxHottData.txtMsg.text[2][13] = 'M';
+							} else{
+								TxHottData.txtMsg.text[2][11] = '-';
+								TxHottData.txtMsg.text[2][12] = '-';
+								TxHottData.txtMsg.text[2][13] = '-';
+							}
+							
+							
+						}	//endif Sensor Type
+						else{
+							parameter = 0;
+						}
+						
+						TxHottData.txtMsg.text[hott_line_select][0] = '>';
+						invert_line(hott_line_edit);
 					}
 				}				
 #endif	
@@ -1084,7 +1257,7 @@ ISR(TIMER1_COMPA_vect)
                   if( !(GET_RX_PIN( ) == 0 )) data |= 0x80 ;  // If a logical 1 is read, let the data mirror this.
                   SwUartRXData = data ;
                } else {                                       //Done receiving =  8 bits are in SwUartRXData
-                  if ( ( LastRx == HOTT_BINARY_MODE_REQUEST_ID ) && ( ( SwUartRXData == HOTT_SENSOR)    // if the previous byte identifies a polling for a reply in binary format and current is oXs sensor ID
+                  if ( ( LastRx == HOTT_BINARY_MODE_REQUEST_ID ) && ( ( SwUartRXData == sensor_type)    // if the previous byte identifies a polling for a reply in binary format and current is oXs sensor ID
 #ifdef GPS_INSTALLED                           
                               || (  SwUartRXData == HOTT_TELEMETRY_GPS_SENSOR_ID ) 
 #endif                                                                                
@@ -1095,7 +1268,7 @@ ISR(TIMER1_COMPA_vect)
                                delayTxPendingCount  = 1 ;            //  ask for 1 more delay of 1ms in order to reach the total of 5msec                 
                   }
 #ifdef HOTT_TEXT	
-				else if (( LastRx == HOTT_TEXT_MODE_REQUEST_ID) && ((SwUartRXData & 0xF0) == HOTT_SENSOR_TEXT)) {    // if the previous byte identifies a polling for a reply in binary format and current is oXs sensor ID
+				else if (( LastRx == HOTT_TEXT_MODE_REQUEST_ID) && ((SwUartRXData & 0xF0) == sensor_type_text)) {    // if the previous byte identifies a polling for a reply in binary format and current is oXs sensor ID
                                                                               
                                                                                     // the sensor has to reply (if it has data; here we assume it has always data and the data will be in the Hott buffer)
                                flagUpdateHottBuffer = SwUartRXData;         // flag to say to send function that the buffer must be filled. It is expected that send function is called fast enough (so main loop may not be blocked) 

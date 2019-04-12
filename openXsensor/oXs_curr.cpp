@@ -23,8 +23,11 @@ OXS_CURRENT::OXS_CURRENT(uint8_t pinCurrent)
 #ifdef DEBUG  
   printer = &print; //operate on the address of print
 #endif
-  _pinCurrent=pinCurrent;
-  pinMode(pinCurrent,INPUT); 
+#ifdef HOTT_TEXT
+	pinCurrent = current_coef.get_current_pin();
+#endif
+  _pinCurrent=pinCurrent;  
+  pinMode(pinCurrent,INPUT);
 }
 
 // **************** Setup the Current sensor *********************
