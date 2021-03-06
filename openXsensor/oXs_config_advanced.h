@@ -215,9 +215,9 @@ struct ONE_MEASUREMENT {
 	#define HOTT_SENSOR GAM //select GAM as standard sensor
 #endif
 
-#ifndef HOTT_SENSOR_TEXT
+/*#ifndef HOTT_SENSOR_TEXT
 	error: HOTT_SENSOR_TEXT must be defined!
-#endif
+#endif*/
 
 /*	
 #ifdef HOTT_SENSOR

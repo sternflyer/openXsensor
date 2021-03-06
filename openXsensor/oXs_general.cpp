@@ -27,10 +27,9 @@ ISR( TIMER1_CAPT_vect, ISR_NOBLOCK )
 
 	if ( ++RpmCounter > 3 )
 	{
-		uint8_t oReg = SREG ; // save status register
 		cli() ;
 		uint16_t time = ICR1 ;	// Read capture register on timer 1
-		SREG = oReg ; // restore status register
+		sei() ;
 		elapsed = time - lastTimerValue ;
   #if F_CPU == 20000000L   // 20MHz clock 
    #error Unsupported clock speed
@@ -131,7 +130,7 @@ void init()
   // Timer1
   TIMSK1 &= ~( 1<< OCIE1A ) ; // Disable interupt on timer 1 for compA
   TCCR1A = 0x00 ;    //Init.
-  TCCR1B = 0xC1 ;    // I/p noise cancel, rising edge, Clock/1 (so running at same speed as CPU)
+  TCCR1B = 0xC1 ;    // I/p noise cancel, rising edge, Clock/1
 
   //  initialise le ADC converter
 #if defined(ADCSRA) 
@@ -178,12 +177,10 @@ void init()
 #endif
 
 #ifdef MEASURE_RPM
-	DDRB &= ~0x01 ;	// Pin PB0 is input in order to allow PCINT0
+	DDRB &= ~0x01 ;	// Pin is input
 	PORTB |= 1 ; 		// With pullup
 	sbi( TIMSK1, ICIE1 ) ; // allow change interrupt 
 #endif // MEASURE_RPM
-
-
 	sei();  //allow interrupt in general
 
 // timer2 (used by analoWrite to generate PWM

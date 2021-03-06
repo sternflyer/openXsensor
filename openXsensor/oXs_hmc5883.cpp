@@ -22,13 +22,12 @@ Driver v. 5.1 library in order to reduce the size of flash memory.
 
 #ifdef DEBUG 
   #ifndef GENERATE_MAG_CALIBRATION_DATA
-//    #define DEBUG_HMC5883
+    #define DEBUG_HMC5883
   #endif
 #endif
 
-    float magHeading ;
-    boolean newMagHeading ;
-    const int16_t XMagOffset = XMAG_OFFSET ;
+float magHeading ;
+   const int16_t XMagOffset = XMAG_OFFSET ;
     const int16_t YMagOffset = YMAG_OFFSET ;
     const int16_t ZMagOffset = ZMAG_OFFSET ;
     const float XX  = XXMAG_CORRECTION ;
@@ -89,6 +88,8 @@ boolean read_hmc5883() {   // return a flag that is true when a new heading is a
       int16_t Z = (I2c.receive() << 8 ) |  I2c.receive() ;
       int16_t Y = (I2c.receive() << 8 ) |  I2c.receive() ;
 
+  float rollRad = ((float) roll.value) * 0.0017453293  ; // from 1/10 of degree to rad
+  float pitchRad = ((float )pitch.value) * 0.0017453293 ;
 
 
 #ifdef  GENERATE_MAG_CALIBRATION_DATA
@@ -104,9 +105,9 @@ boolean read_hmc5883() {   // return a flag that is true when a new heading is a
     float YC = YXMAG_CORRECTION * XWithOff + YYMAG_CORRECTION * YWithOff + YZMAG_CORRECTION * ZWithOff ;
     float ZC = ZXMAG_CORRECTION * XWithOff + ZYMAG_CORRECTION * YWithOff + ZZMAG_CORRECTION * ZWithOff ;
     
-    static float X1 ;
-    static float Y1 ;
-    static float Z1 ;
+    static int16_t X1 ;
+    static int16_t Y1 ;
+    static int16_t Z1 ;
     static float rollRad1  ;
     static float pitchRad1 ;
     static float cosRoll ;
@@ -117,15 +118,11 @@ boolean read_hmc5883() {   // return a flag that is true when a new heading is a
     static float Xh ;
     static float Yh ;
 
-  float rollRad = ((float) roll.value) * 0.0017453293  ; // from 1/10 of degree to rad
-  float pitchRad = ((float )pitch.value) * 0.0017453293 ;
-
-
 #ifdef DEBUG_HMC5883
       static boolean firstPass = true ;
       if ( firstPass ) {
         firstPass = false ;
-        Serial.println(F("X , Y , Z , uncomoensated tilted heading, roll , pitch ==> compensated tilted headings"));
+        Serial.println(F("X , Y , Z , roll , pitch ==> headings"));
       }
       Serial.print( (int) X ) ; Serial.print( " , ") ;
       Serial.print( (int) Y ) ; Serial.print( "  , ") ;
@@ -136,12 +133,15 @@ boolean read_hmc5883() {   // return a flag that is true when a new heading is a
 #endif
  
   
-  for ( uint8_t i = 10 ; i <= 10 ; i++) {         // this loop allows to test all combinations of reversing sign (to test them all, replace by i = 0 ; i<= 15
+  for ( uint8_t i = 0 ; i <= 15 ; i++) {
+    //Serial.print(  i ) ;Serial.print( " => ") ;
     X1 = XC ;
     Y1 = YC ;
     Z1 = ZC ;
     rollRad1 = rollRad ;
     pitchRad1 = pitchRad ;
+  
+//    if (i & 0x01)  X1 = - X ;
     if (i & 0x01)  Y1 = - YC ; 
     if (i & 0x02)  Z1 = - ZC ; 
     if (i & 0x04)  rollRad1 = - rollRad ; 
@@ -165,7 +165,6 @@ boolean read_hmc5883() {   // return a flag that is true when a new heading is a
     } else {
       magHeading  = atan2( Yh , Xh) * 57.29577951 ; //convert in degree  
     }
-    newMagHeading = true ;
 #ifdef DEBUG_HMC5883
      Serial.print( (int) magHeading  ) ;Serial.print( "   ") ;
 #endif
@@ -175,13 +174,78 @@ boolean read_hmc5883() {   // return a flag that is true when a new heading is a
       Serial.println( " ") ;
 #endif
   
+  
+/*  
+  float cosRoll = cosf(rollRad);
+  float sinRoll = sinf(rollRad);  
+  float cosPitch = cosf(pitchRad);
+  float sinPitch = sinf(pitchRad);
+  
+  
+// Extract of datasheet : In Figure 2, a compass is shown with roll (θ) and pitch (φ) tilt angles referenced to the right and forward level directions.
+// The X, Y, and Z magnetic readings can be transformed to the horizontal plane (Xh, Yh) by applying the rotation equations shown in equation (2).
+// Xh = X*cos(φ) + Y*sin(θ)*sin(φ) - Z*cos(θ)*sin(φ)
+// Yh = Y*cos(θ) + Z*sin(θ)
+  float Xh = X * cosPitch + Y * sinRoll * sinPitch - Z*cosRoll * sinPitch ;
+  float Yh = Y * cosRoll + Z * sinRoll ;
+
+
+ // Tilt compensation second method
+  float Xh2 = X * cosPitch + Y * sinRoll * sinPitch + Z*cosRoll * sinPitch ;
+  float Yh2 = Y * cosRoll - Z * sinRoll ;
+ 
+  float magHeading2 = atan2(Yh2, Xh2) * 57.29577951;
+
+// Tilt compensation third method
+  float Xh3 = X * cosPitch - Y * sinRoll * sinPitch + Z*cosRoll * sinPitch ;
+  float Yh3 = - (Y * cosRoll) - Z * sinRoll ;
+ 
+  float magHeading3 = atan2(Yh3, Xh3) * 57.29577951;
+
+
+//Heading for (Xh <0) = 180 - arcTan(Yh/Xh)
+//for (Xh >0, Yh <0) = - arcTan(Yh/Xh)
+//for (Xh >0, Yh >0) = 360 - arcTan(Yh/Xh)
+//for (Xh =0, Yh <0) = 90
+//for (Xh =0, Yh >0) = 270
+  float magHeading ; 
+  if ( Xh == 0 ) { 
+    if (Yh <= 0 ) { 
+      magHeading = 90 ;
+    } else { 
+      magHeading = 270 ;
+    }
+  } else {
+    magHeading = atan2( Yh , Xh) * 57.29577951 ; //convert in degree  
+  }
+ // if ( magHeading < 0 ) magHeading += 360 ; 
+ 
+#ifdef DEBUG_HMC5883
+      static boolean firstPass = true ;
+      if ( firstPass ) {
+        firstPass = false ;
+        Serial.print(F("X , Y , Z , roll , pitch , heading"));
+      }
+      Serial.print( (int) X ) ; Serial.print( " ") ;
+      Serial.print( (int) Y ) ; Serial.print( " ") ;
+      Serial.print( (int) Z ) ; Serial.print( " - ") ;
+      Serial.print( (int) roll.value / 10) ; Serial.print( " ") ; // in deg
+      Serial.print( (int) pitch.value  / 10 ) ; Serial.print( " - ") ;  // in deg
+      Serial.print( (int) (atan2( Y , X ) * 57.29577951) ) ; Serial.print( " ") ;
+      Serial.print( (int) magHeading ) ;Serial.print( " ") ;
+      Serial.print( (int) magHeading2 ) ; Serial.print( " ") ;
+      Serial.print( (int) magHeading3 ) ; Serial.print( " ") ;
+     Serial.println( " ") ;
+      
+#endif
+*/    
       previousMillisHmc = currentMillisHmc ; 
       return true ;
       
   } else {
     return true ;
   }  
-}   // end of read_hmc5883
+}
 
 
 

@@ -20,30 +20,30 @@
   #include "oXs_hmc5883.h"
 #endif
   
-#if defined (SAVE_TO_EEPROM ) and ( SAVE_TO_EEPROM == YES ) 
+#ifdef SAVE_TO_EEPROM
   #include <EEPROM.h>
   #include "EEPROMAnything.h"
 #endif
 
 #if  ! defined(PROTOCOL)
-    #error The parameter PROTOCOL in config_basic.h is not defined
+    #error The parameter PROTOCOL in config.h is not defined
 #elif ! ( (PROTOCOL == FRSKY_SPORT) or (PROTOCOL == FRSKY_HUB) or (PROTOCOL == FRSKY_SPORT_HUB) or (PROTOCOL == HOTT) or (PROTOCOL == MULTIPLEX)  or (PROTOCOL == JETI))    
-    #error The parameter PROTOCOL in config_basic.h is NOT valid
+    #error The parameter PROTOCOL in config.h is NOT valid
 #endif
 
 #if  defined(VARIO) and (! defined(VSPEED_SOURCE))
-    #error The parameter VSPEED_SOURCE in config_basic.h is not defined while a type of baro sensor is defined
+    #error The parameter VSPEED_SOURCE in config.h is not defined while VARIO is defined
 #elif  defined(VARIO) and  defined(VSPEED_SOURCE) and ( ! ( (VSPEED_SOURCE == FIRST_BARO) or (VSPEED_SOURCE == SECOND_BARO) or (VSPEED_SOURCE == AVERAGE_FIRST_SECOND) \
                                                             or (VSPEED_SOURCE == AIRSPEED_COMPENSATED) or (VSPEED_SOURCE == BARO_AND_IMU) or (VSPEED_SOURCE == PPM_SELECTION) ) )
-    #error The parameter VSPEED_SOURCE in config_basic.h is NOT valid
+    #error The parameter VSPEED_SOURCE in config.h is NOT valid
 #endif    
 
-#if defined( ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES) and defined (AN_ADS1115_IS_CONNECTED) and (AN_ADS1115_IS_CONNECTED == YES) and defined(ADS_MEASURE) and defined(ADS_CURRENT_BASED_ON)
-  #error It is not allowed to ask for current calculation based both on arduino Adc and on ads1115; define only or ARDUINO_MEASURES_A_CURRENT or ADS_CURRENT_BASED_ON
+#if defined( PIN_CURRENTSENSOR ) and defined(ADS_MEASURE) and defined(ADS_CURRENT_BASED_ON)
+  #error It is not allowed in config.h to ask for current calculation based both arduino Adc and on ads1115; define only or PIN_CURRENTSENSOR or ADS_CURRENT_BASED_ON
 #endif            
 
 #if defined (PIN_PPM ) && defined ( USE_6050 ) &&  ( PIN_INT_6050 == PIN_PPM )
-  #error Error in oXs_config_advanced.h : PIN_PPM may not be equal to PIN_INT_6050
+  #error Error in oXs_config.h : PIN_PPM may not be equal to PIN_INT_6050
 #endif    
 
 #if defined( VFAS_SOURCE ) && ( !  ( ( VFAS_SOURCE == VOLT_1) || ( VFAS_SOURCE == VOLT_2) || ( VFAS_SOURCE == VOLT_3) || ( VFAS_SOURCE == VOLT_4) || ( VFAS_SOURCE == VOLT_5) || ( VFAS_SOURCE == VOLT_6) || ( VFAS_SOURCE == ADS_VOLT_1) || ( VFAS_SOURCE == ADS_VOLT_2) || ( VFAS_SOURCE == ADS_VOLT_3) || ( VFAS_SOURCE == ADS_VOLT_4)) ) 
@@ -85,21 +85,8 @@
     || ( T2_SOURCE == TEST_1) || ( T2_SOURCE == TEST_2) || ( T2_SOURCE == TEST_3) ) )
  #error When defined, T2_SOURCE must be one of following values TEST_1, TEST_2, TEST_3, GLIDER_RATIO , SECONDS_SINCE_T0 ,AVERAGE_VSPEED_SINCE_TO , SENSITIVITY , PPM , VOLT_1, VOLT_2, VOLT_3, VOLT_4, VOLT_5, VOLT_6, ADS_VOLT_1, ADS_VOLT_2, ADS_VOLT_3, ADS_VOLT_4, 
 #endif
-#if defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES) && (!defined(ADS_MEASURE))
-  #error When AN_ADS1115_IS_CONNECTED is set on YES, ADS_MEASURE (in oXs_config_advanced.h) must be uncommented and contains 4 values
-#endif
-#if defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) && (!defined(PIN_VOLTAGE))
-  #error When ARDUINO_MEASURES_VOLTAGES is set on YES, PIN_VOLTAGE must be uncommented and contains 6 values
-#endif
-#if defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES) && (!defined(PIN_CURRENTSENSOR))
-  #error When ARDUINO_MEASURES_A_CURRENT is set on YES, PIN_CURRENTSENSOR must be uncommented and must specify the analog pin that is connected to the current sensor
-#endif
-
 #if defined ( ADS_AIRSPEED_BASED_ON ) && ( ! ( ( ADS_AIRSPEED_BASED_ON == ADS_VOLT_1) || ( ADS_AIRSPEED_BASED_ON == ADS_VOLT_2) || ( ADS_AIRSPEED_BASED_ON == ADS_VOLT_3) || ( ADS_AIRSPEED_BASED_ON == ADS_VOLT_4) ) )
  #error When defined, ADS_AIRSPEED_BASED_ON must be one of following values ADS_VOLT_1, ADS_VOLT_2, ADS_VOLT_3, ADS_VOLT_4
-#endif
-#if defined(GPS_REFRESH_RATE) && ( ! ( (GPS_REFRESH_RATE == 1) || (GPS_REFRESH_RATE == 5) || (GPS_REFRESH_RATE == 10) ))      
-  #error When defined GPS_REFRESH_RATE must be 1, 5 or 10
 #endif
   
 #ifdef PIN_PPM
@@ -146,21 +133,13 @@ extern unsigned long millis( void ) ;
 //#define DEBUGCOMPENSATEDCLIMBRATE
 //#define DEBUGOUTDATATOSERIAL
 //#define DEBUGENTERLOOP
-//#define DEBUG_ENTER_READSENSORS
-//#define DEBUG_CALCULATE_FIELDS
 //#define DEBUGSEQUENCE
-//#define DEBUG_PPM_AVAILABLE_FROM_INTERRUPT
+//#define DEBUGPPM
 //#define DEBUGPPMVALUE
 //#define DEBUGFORCEPPM
-//#define DEBUG_SELECTED_VARIO
 //#define DEBUG_VARIO_TIME
 //#define DEBUG_VOLTAGE_TIME
-//#define DEBUG_READ_SPORT
-//#define DEBUG_SIMULATE_FLOW_SENSOR
-//#define DEBUG_FLOW_SENSOR
-//#define DEBUG_RPM
 #endif
-
 
 // ************ declare some functions being used ***************
 int freeRam () ;
@@ -178,7 +157,6 @@ bool checkFreeTime() ;
 void setNewSequence() ;
 void checkSequence() ;
 void blinkLed( uint8_t blinkType ) ;
-void checkFlowParam() ;
 
 // *********** declare some variables *****************************
 #ifdef VARIO
@@ -189,14 +167,14 @@ struct ONE_MEASUREMENT mainVspeed ;
 bool newVarioAvailable2 ;
 #endif
 
-#if defined (VARIO) && ( defined ( AIRSPEED) || ( defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined( ADS_AIRSPEED_BASED_ON ) ) )  
+#if defined (VARIO) && ( defined ( AIRSPEED) || ( defined ( ADS_MEASURE ) && defined( ADS_AIRSPEED_BASED_ON ) ) )  
 struct ONE_MEASUREMENT compensatedClimbRate ;
 bool switchCompensatedClimbRateAvailable ;
 float rawCompensatedClimbRate ; 
 
 #endif
 
-#if defined (VARIO) && ( defined (VARIO2) || ( defined ( AIRSPEED) || ( defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined (ADS_MEASURE) && defined (ADS_AIRSPEED_BASED_ON) ) ) || defined (USE_6050) )
+#if defined (VARIO) && ( defined (VARIO2) || ( defined ( AIRSPEED) || (defined (ADS_MEASURE) && defined (ADS_AIRSPEED_BASED_ON) ) ) || defined (USE_6050) )
 struct ONE_MEASUREMENT switchVSpeed ;
 #endif
 
@@ -230,14 +208,13 @@ boolean gliderRatioPpmOn = false ;
   int32_t altitudeOffsetToKalman ;
   extern volatile uint32_t lastImuInterruptMillis ;
 #ifdef USE_HMC5883 
-  extern float magHeading ;
-  extern boolean newMagHeading; 
+  extern float magHeading ; 
 #endif
   #ifdef DEBUG_KALMAN_TIME  
     int delayKalman[5] ;
   #endif
 #endif // end of USE_6050
- 
+
 
 
 #if defined(ADS_AIRSPEED_BASED_ON) and (ADS_AIRSPEED_BASED_ON >= ADS_VOLT1) and (ADS_AIRSPEED_BASED_ON <= ADS_VOLT_4)
@@ -248,22 +225,6 @@ boolean gliderRatioPpmOn = false ;
 uint16_t ppmus ; // duration of ppm in usec
 int prevPpm ; //^previous ppm
 struct ONE_MEASUREMENT ppm ; // duration of pulse in range -100 / + 100 ; can exceed those limits
-struct ONE_MEASUREMENT newPpm ; // keep the ppm value received via sport before it is processed in other part of the code
-
-#if defined ( A_FLOW_SENSOR_IS_CONNECTED ) && ( A_FLOW_SENSOR_IS_CONNECTED == YES)  // we will use interrupt PCINT0 
-  volatile uint16_t flowMeterCnt ;            // counter of pin change connected to the flow sensor (increased in the interrupt. reset every X sec when flow is processed)
-  float currentFlow  ;                     // count the consumed ml/min during the last x sec
-  float consumedML   ;                     // total of consumed ml since the last reset (or restart if reset is not activated); can be saved in EEPROM
-  struct ONE_MEASUREMENT actualFlow ;             // in ml/min
-  struct ONE_MEASUREMENT remainingFuelML ;         // in ml
-  struct ONE_MEASUREMENT fuelPercent ;             // in % of tank capacity
-  boolean newFlowAvailable = false ;
-  int16_t flowParam[8] =  { INIT_FLOW_PARAM } ;                      // table that contains the parameters to correct the ml/pulse depending on the flow ; can be loaded by SPORT in EEPROM; can also be defined in a parameter 
-  uint16_t tankCapacity =  TANK_CAPACITY ;     // capacity of fuel tank
-  uint16_t consumedMLEeprom   ;                 //Last value saved in eeprom
-  uint16_t tankCapacityEeprom ;                 //Last value saved in eeprom
-  int16_t flowParamEeprom[8]  ;                 //Last value saved in eeprom
-#endif
 
 
 
@@ -366,10 +327,6 @@ struct ONE_MEASUREMENT test3 ; // used in order to test the transmission of any 
 uint8_t selectedVario = VARIO_PRIMARY ; // identify the vario to be used when switch vario with PPM is active (1 = first MS5611) 
 #endif
 
-// to read SPORT (for Frsky protocol
-extern uint8_t  volatile TxData[8] ;
-extern uint8_t  volatile TxDataIdx ;
-
 
 //******************* Create instances of the used classes ******************************************
 #ifdef VARIO
@@ -411,7 +368,7 @@ extern uint8_t  volatile TxDataIdx ;
   #endif  //DEBUG
 #endif
 
-#if defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES)
+#ifdef PIN_VOLTAGE
   #ifdef DEBUG  
     OXS_VOLTAGE oXs_Voltage(Serial);
   #else
@@ -419,7 +376,7 @@ extern uint8_t  volatile TxDataIdx ;
   #endif  //DEBUG
 #endif
 
-#if defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES)
+#ifdef PIN_CURRENTSENSOR
   #ifdef DEBUG  
     OXS_CURRENT oXs_Current(PIN_CURRENTSENSOR,Serial);
   #else
@@ -435,7 +392,7 @@ extern uint8_t  volatile TxDataIdx ;
   #endif //DEBUG
 #endif
 
-#if defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE)
+#ifdef ADS_MEASURE
   #ifdef DEBUG
     OXS_ADS1115 oXs_ads1115(  I2C_ADS_Add , Serial);
   #else
@@ -463,10 +420,12 @@ void setup(){
 #ifdef GPS_INSTALLED
   Serial.begin(38400); // when GPS is used, baudrate is reduced because main loop must have the time to read the received char.
 #endif
-#ifdef DEBUG 
+
+//#ifdef DEBUG
 #ifndef GPS_INSTALLED
   Serial.begin(115200L); // when GPS is not used, baudrate can be 115200
 #endif
+#ifdef DEBUG 
   Serial.println(F("openXsensor starting.."));
   Serial.print(F(" milli="));  
   Serial.println(millis());
@@ -507,7 +466,7 @@ void setup(){
 
 
   // ******** Invoke all setup methods and set reference
-#if defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES)
+#ifdef PIN_VOLTAGE
   oXs_Voltage.setupVoltage(); 
   oXs_Out.voltageData=&oXs_Voltage.voltageData; 
 #endif
@@ -540,12 +499,12 @@ void setup(){
   oXs_Out.airSpeedData=&oXs_4525.airSpeedData; 
 #endif // end AIRSPEED
 
-#if defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES)
+#ifdef PIN_CURRENTSENSOR
   oXs_Current.setupCurrent( );
   oXs_Out.currentData=&oXs_Current.currentData;
 #endif
 
-#if defined (VARIO) &&  ( defined ( AIRSPEED) || ( defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined (ADS_MEASURE) && defined (ADS_AIRSPEED_BASED_ON) ) )
+#if defined (VARIO) &&  ( defined ( AIRSPEED) || (defined (ADS_MEASURE) && defined (ADS_AIRSPEED_BASED_ON) ) )
   compensatedClimbRate.available = false;
 //  compensatedClimbRate = 0;
 #endif
@@ -564,17 +523,19 @@ void setup(){
   setup_hmc5883() ;  // set up magnetometer
 #endif
 
-#if defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE)
+#ifdef ADS_MEASURE
   oXs_ads1115.setup() ;
-#if defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && defined(ADS_CURRENT_BASED_ON)
+#if defined(ADS_MEASURE) && defined(ADS_CURRENT_BASED_ON)
   oXs_Out.currentData=&oXs_ads1115.adsCurrentData;
 #endif            
-#if defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && defined(ADS_AIRSPEED_BASED_ON)
+#if defined(ADS_MEASURE) && defined(ADS_AIRSPEED_BASED_ON)
   oXs_Out.airSpeedData=&oXs_ads1115.adsAirSpeedData;
 #endif            
+
+
 #endif
 
-#if defined (SAVE_TO_EEPROM ) and ( SAVE_TO_EEPROM == YES )
+#ifdef SAVE_TO_EEPROM
   LoadFromEEProm();
 #endif
 
@@ -584,19 +545,12 @@ void setup(){
     ppm.available = false ;
 #endif
 
-#ifdef PPM_INTERRUPT      // PPM use INT0 (pin 2) or INT1 (pin 3) that are on port D
+#ifdef PPM_INTERRUPT
 	PORTD |= PPM_PIN_HEX ;	// Pullup resistor
 	DDRD &= ~PPM_PIN_HEX ;	// Input
 	EICRA |= PPM_INT_MASK ;		// Interrupt on rising edge
 	EIFR = PPM_INT_BIT ;			// Clear interrupt flag
 	EIMSK |= PPM_INT_BIT ;		// Enable interrupt
-#endif
-
-#if defined ( A_FLOW_SENSOR_IS_CONNECTED ) && ( A_FLOW_SENSOR_IS_CONNECTED == YES)  // we will use interrupt PCINT0 
-  PORTB |= 0X2 ;  // set pullup resistor on pin 9 (= PB1)
-  DDRB &= ~ 0X2 ; // set pin as input on pin 9 (= PB1)
-  PCMSK0 = 0X2 ; // prepare to allow pin change interrupt on only pin 9 ( = PB1)
-  PCICR |= (1<<PCIE0)   ;     // enable pin change interrupt 0 so on pin from PB0 to PB7 = e.g. pins 8 to 13 to collect pin changes for flow sensor 
 #endif
 
   RpmSet = false ;
@@ -718,21 +672,15 @@ if ( currentLoopMillis - lastLoop500Millis > 500 ) {
 
     // read all sensors
     readSensors(); 
-#ifdef DEBUG_CALCULATE_FIELDS
-  Serial.print("call calculateAllFields at") ; Serial.println(millis()) ;
-#endif
+
     // Calculate all fields
     calculateAllFields(); 
-
-#ifdef DEBUG_CALCULATE_FIELDS
-  Serial.print("end of call calculateAllFields at") ; Serial.println(millis()) ;
-#endif
 
     // prepare the telemetry data to be sent (nb: data are prepared but not sent)
     if ( millis() > 1500 ) oXs_Out.sendData(); 
    
-// PPM Processing = Read the ppm Signal from receiver  or use the SPORT ppm value from readSensors and process it 
-#if defined ( PIN_PPM ) || (  defined(PPM_VIA_SPORT) && ( (PROTOCOL  == FRSKY_SPORT) || (PROTOCOL == FRSKY_SPORT_HUB) ) )
+// PPM Processing = Read the ppm Signal from receiver and process it 
+#ifdef PIN_PPM 
 #if defined (VARIO) || defined (VARIO2)
     if (checkFreeTime()) ProcessPPMSignal();
 #else
@@ -754,7 +702,7 @@ if ( currentLoopMillis - lastLoop500Millis > 500 ) {
 
 // if a sequence is set up
 #ifdef SEQUENCE_OUTPUTS
-#if defined( SEQUENCE_MIN_VOLT_6) || defined ( SEQUENCE_MIN_CELL ) 
+#if (defined( SEQUENCE_MIN_VOLT_6) || defined ( SEQUENCE_MIN_CELL ) 
   if ( (lowVoltage == true) && (prevLowVoltage == false) ) {
     prevLowVoltage = true ;
     ppm.value = 125 ; // fix the sequence to be used when voltage is low  ; it is sequence +125
@@ -781,9 +729,9 @@ if ( currentLoopMillis - lastLoop500Millis > 500 ) {
 #endif  // SEQUENCE_OUTPUTS
 
 // Save Persistant Data To EEProm every 10 seconds
-#if defined (SAVE_TO_EEPROM ) and ( SAVE_TO_EEPROM == YES )
+#ifdef SAVE_TO_EEPROM
   static unsigned long LastEEPromMs=millis();
-  if (millis() > LastEEPromMs+10000){ 
+  if (millis()>LastEEPromMs+10000){ 
     LastEEPromMs=millis();
     SaveToEEProm();
   }
@@ -802,26 +750,17 @@ extern uint16_t i2cPressureError ;
 extern uint16_t i2cTemperatureError ;
 extern uint16_t i2cReadCount ;
 
-void readSensors() {  
-   
+void readSensors() {   
 #ifdef AIRSPEED
   oXs_4525.readSensor(); // Read a first time the differential pressure on 4525DO, calculate airspeed; note airspeed is read a second time in the loop in order to reduce response time
 #endif
 
 #ifdef VARIO
-#ifdef DEBUG_ENTER_READSENSORS
-  Serial.print( "read baro 1 at ") ; Serial.println(millis()); 
-#endif
-
   newVarioAvailable = oXs_MS5611.readSensor(); // Read pressure & temperature on MS5611, calculate Altitude and vertical speed; 
   if ( oXs_MS5611.varioData.absoluteAlt.available == true and oXs_MS5611.varioData.rawPressure > 100000.0f ) actualPressure = oXs_MS5611.varioData.rawPressure / 10000.0 ; // this value can be used when calculating the Airspeed
 #endif
 
 #ifdef VARIO2
-#ifdef DEBUG_ENTER_READSENSORS
-  Serial.print( "read baro 2 at ") ; Serial.println(millis()); 
-#endif
-
   newVarioAvailable2 = oXs_MS5611_2.readSensor(); // Read pressure & temperature on MS5611, calculate Altitude and vertical speed
 #endif
 
@@ -837,26 +776,22 @@ void readSensors() {
     read_hmc5883() ;
 #endif
 
-#if defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES)
+#ifdef PIN_VOLTAGE
     oXs_Voltage.readSensor();    // read voltage only if there enough time to avoid delaying vario reading; It takes about 750 usec to go through the read sensor.
 #endif   // end voltage
 
-#if defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES)
+#ifdef PIN_CURRENTSENSOR
     oXs_Current.readSensor() ; // Do not perform calculation if there is less than 2000 usec before MS5611 ADC is available =  (9000 - 2000)/2
-#endif             // End defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES)
+#endif             // End PIN_CURRENTSENSOR
 
 #ifdef GPS_INSTALLED
-#ifdef DEBUG_ENTER_READSENSORS
-  Serial.print( "read gps at ") ; Serial.println(millis()); 
-#endif
-
     oXs_Gps.readGps() ; // Do not perform calculation if there is less than 2000 usec before MS5611 ADC is available =  (9000 - 2000)/2
 #endif             // End GPS_INSTALLED
 
-#if defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE)
+#ifdef ADS_MEASURE
     if( oXs_ads1115.readSensor() ) { // return true when a new average is available; it means that the new value has to be stored/processed.
     }
-#endif             // End ADS_MEASURE
+#endif             // End GPS_INSTALLED
 
 
 #ifdef MEASURE_RPM
@@ -869,55 +804,7 @@ void readSensors() {
         sport_rpm.value = RpmValue ;
         sport_rpm.available = true ;    
         lastRpmMillis = millis() ;
-#ifdef DEBUG_RPM
-       Serial.print( "RPM ") ; Serial.println(sport_rpm.value); 
-#endif       
   }      
-#endif
-
-#if defined ( A_FLOW_SENSOR_IS_CONNECTED ) && ( A_FLOW_SENSOR_IS_CONNECTED == YES)  
-    processFlowMeterCnt () ;
-#endif 
-
-
-#if ( defined ( PPM_VIA_SPORT ) || ( defined ( A_FLOW_SENSOR_IS_CONNECTED ) && ( A_FLOW_SENSOR_IS_CONNECTED == YES) ) ) && defined (PROTOCOL ) && ( ( PROTOCOL == FRSKY_SPORT ) || ( PROTOCOL == FRSKY_SPORT_HUB ) ) // if it is allowed to read SPORT
-    uint8_t oReg = SREG ; // save status register
-    cli() ;
-    if ( TxDataIdx == 8 ) {
-      TxDataIdx++ ; // Increase the number of data in order to avoid to read twice
-      uint16_t txField = ( TxData[2] << 8 ) + TxData[1] ;                                                      // id of the field being received
-      uint32_t txValue = ( ( ( ( (TxData[6] << 8) + TxData[5] ) << 8 ) + TxData[4] ) << 8 ) + TxData[3] ;      // value of the field being received
-      SREG = oReg ;  // restore the status register
-#ifdef DEBUG_READ_SPORT
-      Serial.print("At: ") ; Serial.print(millis()) ;
-      Serial.print(" "); Serial.print(TxData[0], HEX);  
-      Serial.print(" "); Serial.print(TxData[1], HEX);  
-      Serial.print(" "); Serial.print(TxData[2], HEX);  
-      Serial.print(" "); Serial.print(TxData[3], HEX);  
-      Serial.print(" "); Serial.print(TxData[4], HEX);  
-      Serial.print(" "); Serial.print(TxData[5], HEX);  
-      Serial.print(" "); Serial.print(TxData[6], HEX);
-      Serial.print(" "); Serial.print(TxData[7], HEX);
-      Serial.println(" ");    
-#endif      
-#if  ( defined ( A_FLOW_SENSOR_IS_CONNECTED ) && ( A_FLOW_SENSOR_IS_CONNECTED == YES) )
-      if (  txField <= TX_FIELD_FLOW_CORR_4)  {  // save values for flow meter parameter in memory
-        flowParam[txField] = txValue ;
-      } else if (  txField ==  TX_FIELD_TANK_CAPACITY) {  // save values for capacity in memory
-        tankCapacity = txValue ;                          // note: values will be saved in eeprom in EEPROM function
-      } else if (  txField ==  TX_FIELD_RESET_FUEL ) {
-        consumedML = 0 ;                                  // reset consumption                                               
-      }
-#endif
-#if  defined ( PPM_VIA_SPORT ) &&   ( ( PROTOCOL  == FRSKY_SPORT ) || ( PROTOCOL == FRSKY_SPORT_HUB ) )   
-      if ( txField == TX_FIELD_PPM )  {                   // save the value for ppm 
-          newPpm.value =  ((int32_t) txValue) * 100 / 1024 ;
-          newPpm.available = true ;
-      }   
-#endif
-    } else {
-      SREG = oReg ;  // restore the status register      
-    }
 #endif
  
 }                  // ************** end of readSensors ********************************************
@@ -929,7 +816,7 @@ void readSensors() {
 void calculateAllFields () {
 
 // compensated Vpeed based on MS4525
-#if defined(VARIO) && ( defined ( AIRSPEED) || ( defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined ( ADS_MEASURE ) && defined( ADS_AIRSPEED_BASED_ON ) ) ) 
+#if defined(VARIO) && ( defined ( AIRSPEED) || ( defined ( ADS_MEASURE ) && defined( ADS_AIRSPEED_BASED_ON ) ) ) 
     if ( newVarioAvailable ) calculateDte() ; 
 #endif 
 
@@ -965,8 +852,8 @@ void calculateAllFields () {
             vSpeedImu.available = true ;
             switchVTrackAvailable = true ;
 
-  //#define FILL_TEST_3_WITH_EXPECTED_ALT    // force a calculation of an expected altitude x seconds in the future
-  #ifdef FILL_TEST_3_WITH_EXPECTED_ALT
+  //#define SEND_EXPECTED_ALT    // force a calculation of an expected altitude x seconds in the future
+  #ifdef SEND_EXPECTED_ALT
             #define EXPECTED_AT_SEC 0.2        // number of sec used for the projection; can have decimals; NB: expected alt = Alt at time 0 + Vspeed at time 0 * seconds  + 0.5 * Accz at time 0 * seconds * seconds
             test3.value = ( zTrack - oXs_MS5611.varioData.altOffset ) + ( vTrack *  EXPECTED_AT_SEC ) + ( 0.5 *  world_linear_acceleration_z * EXPECTED_AT_SEC * EXPECTED_AT_SEC ) ;
             test3.available = true ; 
@@ -975,8 +862,8 @@ void calculateAllFields () {
 
 
             
-  //#define FILL_TEST_1_2_3_WITH_LINEAR_ACC
-  #ifdef FILL_TEST_1_2_3_WITH_LINEAR_ACC                                                  
+  //#define SEND_LINEAR_ACC
+  #ifdef SEND_LINEAR_ACC                                                  
             test1.value = linear_acceleration_x * 981 ; 
             test1.available = true ; 
             test2.value =  linear_acceleration_y * 981; 
@@ -997,7 +884,7 @@ void calculateAllFields () {
 
 
 // calculate selected Vspeed based on ppm
-#if defined (VARIO) && ( defined (VARIO2) || defined (AIRSPEED) || defined (USE_6050 ) || (defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined (ADS_MEASURE) && defined (ADS_AIRSPEED_BASED_ON)  ) ) && defined (VARIO_SECONDARY ) && defined( VARIO_PRIMARY )  && defined (PIN_PPM)
+#if defined (VARIO) && ( defined (VARIO2) || defined (AIRSPEED) || defined (USE_6050 ) || (defined (ADS_MEASURE) && defined (ADS_AIRSPEED_BASED_ON)  ) ) && defined (VARIO_SECONDARY ) && defined( VARIO_PRIMARY )  && defined (PIN_PPM)
   if (( selectedVario == FIRST_BARO ) && ( newVarioAvailable ) )  {
       switchVSpeed.value = oXs_MS5611.varioData.climbRate.value ;
       switchVSpeed.available = true ;
@@ -1012,7 +899,7 @@ void calculateAllFields () {
       switchVSpeed.available = true ;
   }
   #endif // end of VARIO2
-  #if  defined (AIRSPEED) || ( defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined (ADS_MEASURE) && defined (ADS_AIRSPEED_BASED_ON) )
+  #if  defined (AIRSPEED) || ( defined (ADS_MEASURE) && defined (ADS_AIRSPEED_BASED_ON) )
   else if ( ( selectedVario == AIRSPEED_COMPENSATED ) && ( newVarioAvailable )) {
       switchVSpeed.value = compensatedClimbRate.value ;
       switchVSpeed.available = true ;  
@@ -1022,14 +909,14 @@ void calculateAllFields () {
       switchCompensatedClimbRateAvailable = false ; // this is the normal process in order to avoid sending twice the same data.
    #endif  // end  defined (SWITCH_VARIO_GET_PRIO)   
   } 
-  #endif // end  defined (AIRSPEED) || (defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined (ADS_MEASURE) && defined (ADS_AIRSPEED_BASED_ON) )
+  #endif // end  defined (AIRSPEED) || (defined (ADS_MEASURE) && defined (ADS_AIRSPEED_BASED_ON) )
   #if  defined (USE_6050)
   else if ( ( selectedVario == BARO_AND_IMU ) && ( switchVTrackAvailable )) {
       switchVSpeed.value = vSpeedImu.value ;
       switchVSpeed.available = true ;
   }
   #endif  // end USE_6050
-#endif // end  defined (VARIO) && ( defined (VARIO2) || defined (AIRSPEED) || defined (USE_6050 ) || (defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined (ADS_MEASURE) && defined (ADS_AIRSPEED_BASED_ON) ) && defined (VARIO_SECONDARY ) && defined( VARIO_PRIMARY ) && defined (VARIO_SECONDARY) && defined (PIN_PPM)
+#endif // end  defined (VARIO) && ( defined (VARIO2) || defined (AIRSPEED) || defined (USE_6050 ) || (defined (ADS_MEASURE) && defined (ADS_AIRSPEED_BASED_ON) ) && defined (VARIO_SECONDARY ) && defined( VARIO_PRIMARY ) && defined (VARIO_SECONDARY) && defined (PIN_PPM)
 
 
 // mainVSpeed (calculated based on the setup in config)
@@ -1042,30 +929,15 @@ void calculateAllFields () {
 #elif defined(VARIO) && defined(VARIO2) && (VSPEED_SOURCE == AVERAGE_FIRST_SECOND)
     mainVspeed.value = averageVSpeed.value ;
         mainVspeed.available = averageVSpeed.available ;
-#elif defined(VARIO) && ( defined(AIRSPEED) || (defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined (ADS_MEASURE) && defined (ADS_AIRSPEED_BASED_ON) ) )  && (VSPEED_SOURCE == AIRSPEED_COMPENSATED)
+#elif defined(VARIO) && ( defined(AIRSPEED) || (defined (ADS_MEASURE) && defined (ADS_AIRSPEED_BASED_ON) ) )  && (VSPEED_SOURCE == AIRSPEED_COMPENSATED)
     mainVspeed.value = compensatedClimbRate.value ;
     mainVspeed.available = compensatedClimbRate.available ;
 #elif defined(VARIO) && defined(USE_6050) && (VSPEED_SOURCE == BARO_AND_IMU)
     mainVspeed.value = vSpeedImu.value ;
     mainVspeed.available = vSpeedImu.available ;
-#elif defined(VARIO) && ( defined (VARIO2) || defined (AIRSPEED) || defined (USE_6050) || (defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined (ADS_MEASURE) && defined (ADS_AIRSPEED_BASED_ON) ) )&& defined (VARIO_SECONDARY ) && defined( VARIO_PRIMARY )  && defined (PIN_PPM)  && (VSPEED_SOURCE == PPM_SELECTION)
+#elif defined(VARIO) && ( defined (VARIO2) || defined (AIRSPEED) || defined (USE_6050) || (defined (ADS_MEASURE) && defined (ADS_AIRSPEED_BASED_ON) ) )&& defined (VARIO_SECONDARY ) && defined( VARIO_PRIMARY )  && defined (PIN_PPM)  && (VSPEED_SOURCE == PPM_SELECTION)
     mainVspeed.value = switchVSpeed.value   ;
     mainVspeed.available = switchVSpeed.available   ;
-#if defined (DEBUG_SELECTED_VARIO)
-static uint32_t next_debug_vspeeds_millis ;
-static boolean next_debug_vspeeds_flag = true ;
-  if (millis() > next_debug_vspeeds_millis) {
-    if (next_debug_vspeeds_flag) {
-      Serial.println("vspeeds= first, compensated, switched , main");
-      next_debug_vspeeds_flag = false ;
-    } else {
-      Serial.print("vspeeds= ");Serial.print(oXs_MS5611.varioData.climbRate.value); Serial.print(",");Serial.print(compensatedClimbRate.value); 
-      Serial.print(",");Serial.print(switchVSpeed.value); Serial.print(",");Serial.print(mainVspeed.value); Serial.println(" ");
-      next_debug_vspeeds_millis = millis() + 500 ;
-    }
-  }
-#endif //  end DEBUG_SELECTED_VARIO
-    
 #endif
 
 
@@ -1075,8 +947,8 @@ static boolean next_debug_vspeeds_flag = true ;
 #endif        
 
 #if defined (VARIO) && ( defined (VARIO2) ) // fill test1 and test2 with Vspeed and relative Alt
-//#define FILL_TEST_1_2_WITH_VSPEED_AND_ALT_FROM_SECOND_VARIO
-#ifdef FILL_TEST_1_2_WITH_VSPEED_AND_ALT_FROM_SECOND_VARIO
+//#define VARIO2_FIELDS_IN_TEST12
+#ifdef VARIO2_FIELDS_IN_TEST12
     test1.value = oXs_MS5611_2.varioData.climbRate.value ;
     test1.available = oXs_MS5611_2.varioData.climbRate.available ;
     test2.value = oXs_MS5611_2.varioData.relativeAlt.value ;
@@ -1085,14 +957,14 @@ static boolean next_debug_vspeeds_flag = true ;
 #endif
 
 //  fill test1 and test2 with DTE and PPM_COMPENSATION
-//#define FILL_TEST_1_WITH_DTE
-//#define FILL_TEST_2_WITH_PPM_AIRSPEED_COMPENSATION
-#if defined(VARIO) && ( defined(AIRSPEED) || (defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined (ADS_MEASURE) && defined (ADS_AIRSPEED_BASED_ON) ) )
-#ifdef FILL_TEST_1_WITH_DTE
+//#define DTE_IN_TEST1
+//#define PPM_COMPENSATION_IN_TEST2
+#if defined(VARIO) && ( defined(AIRSPEED) || (defined (ADS_MEASURE) && defined (ADS_AIRSPEED_BASED_ON) ) )
+#ifdef DTE_IN_TEST1
   test1.value = compensatedClimbRate.value ;
   test1.available = compensatedClimbRate.available ; 
 #endif
-#if  defined(FILL_TEST_2_WITH_PPM_AIRSPEED_COMPENSATION) && defined(PIN_PPM)
+#if  defined(PPM_COMPENSATION_IN_TEST2) && defined(PIN_PPM)
   static uint32_t lastPpmCompensationMillis ;
   uint32_t PpmCompensationMillis = millis() ;
   if ( ( PpmCompensationMillis - lastPpmCompensationMillis ) > 200 ) {
@@ -1104,8 +976,8 @@ static boolean next_debug_vspeeds_flag = true ;
 #endif 
 
 #if defined (VARIO) &&  defined (USE_6050)
-//#define FILL_TEST_1_WITH_YAWRATE
-#ifdef FILL_TEST_1_WITH_YAWRATE
+//#define SEND_YAWRATE_IN_TEST1
+#ifdef SEND_YAWRATE_IN_TEST1
 static int32_t  previousYaw ;
 static uint32_t previousYawRateMillis ;
  uint32_t currentMillis ;
@@ -1142,58 +1014,63 @@ static uint32_t previousYawRateMillis ;
       }  
 #endif
 
-//#define FILL_TEST1_WITH_HEADING_FROM_MAGNETOMETER
-#if defined ( USE_HMC5883 )  && defined (USE_6050) && defined (FILL_TEST1_WITH_HEADING_FROM_MAGNETOMETER)
-      if ( newMagHeading ) {
-        newMagHeading = false ;
-        test1.value = magHeading ;
-        test1.available = true ; 
-      }
+#define SEND_HEADING_IN_TEST1
+#if defined ( USE_HMC5883 )  && defined (USE_6050) && defined (SEND_HEADING_IN_TEST1)
+  test1.value = magHeading ; 
+  test1.available = true ;
+#endif
+
+// calculate Temperature based on a voltage using a NTC
+// We use a NTC and a resistor with the schema
+// < Arduino Vcc > --[serie resistor]-- <Arduino analog pin>  --[NTC]-- <ground>     
+//#define NTC_TEMP_IN_TEST1
+#define NTC_ON_VOLT_NR 6 // specify index of voltage being used for conversion to temperature (e.g. 6 means VOLT_6) 
+#define SERIESRESISTOR 4700 // resitance connected to Arduino Vcc (in Ohm)
+#define TERMISTORNOMINAL 100000 // nominal resistor of NTC (in Ohm)
+#define TEMPERATURENOMINAL 25 // nominal temperature of NTC (in degree Celcius)
+#define BCOEFFICIENT 3950 // B coefficient of NTC
+#if defined ( PIN_VOLTAGE ) && defined ( NTC_TEMP_IN_TEST1 )
+    if ( oXs_Voltage.voltageData.mVolt[NTC_ON_VOLT_NR - 1].available ) {  // when voltage is available, convert it to temperature
+        float media ;
+        // Convert the thermal stress value to resistance
+        // we reuse here the mVolt calculated by oXs. The config must be adapted in a such a way that this mVolt is equal to the raw value returned by the ADC * 1000 (for better accuracy)
+        // therefore, the mVoltPerStep calculated must be equal to 1000 and so :
+        // USE_INTERNAL_REFERENCE must be as comment (so with // in front off)
+        // USE_EXTERNAL_REFERENCE must be as comment (so with // in front off)
+        // REFERENCE_VOLTAGE must be as comment (so with // in front off)
+        // PIN_VOLTAGE must be defined and the analog pin used for NTC must be specified in one of the 6 index        
+        //  RESISTOR_TO_GROUND must be set on 0 (for the index being used)
+        //  OFFSET_VOLTAGE must (normally) be set on 0 (for the index being used)
+        //  SCALE_VOLTAGE  must be set on 204.6 (=1000 * 1023/5000) (for the index being used)
+        // the calculated temperature is filled in an oXs field named TEST_1
+        // So the config must also specify in which telemetry filed TEST_1 must be transmitted
+        // E.g for the Frsky protocol, this is done using this line in the config :     #define T1_SOURCE       TEST_1   
+
+        
+        media =  SERIESRESISTOR /  ( (1023000.0 / (float) oXs_Voltage.voltageData.mVolt[NTC_ON_VOLT_NR - 1].value ) - 1 ) ;
+        //Calculate temperature using the Beta Factor equation
+        float temperatura;
+        temperatura = media / TERMISTORNOMINAL;     // (R/Ro)
+        temperatura = log(temperatura); // ln(R/Ro)
+        temperatura /= BCOEFFICIENT;                   // 1/B * ln(R/Ro)
+        temperatura += 1.0 / (TEMPERATURENOMINAL + 273.15); // + (1/To)
+        temperatura = 1.0 / temperatura;                 // Invert the value
+        temperatura -= 273.15;                         // Convert it to Celsius
+        test1.value = temperatura ;
+        test1.available = true ;
+#define DEBUGNTC
+#if defined( DEBUG) && defined (DEBUGNTC)
+         Serial.print( "Temp= " ) ; Serial.println( test1.value );
+#endif
+              
+    }
 #endif
 
 
 
-#if defined ( A_FLOW_SENSOR_IS_CONNECTED ) && ( A_FLOW_SENSOR_IS_CONNECTED == YES)&& defined (FILL_TEST_1_2_3_WITH_FLOW_SENSOR_CONSUMPTION)
-  if( newFlowAvailable ) {
-    test1.value = actualFlow.value ; 
-    test2.value = remainingFuelML.value ; 
-    test3.value = fuelPercent.value ; 
-    test1.available = test2.available = test3.available = true ;
-    newFlowAvailable = false ;
-  }  
-#endif
 
 //  test1.value = oXs_MS5611.varioData.absoluteAlt.value/10 ;
 //  test1.available = true ;
-
-//#if defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES)
-//if ( currentData.consumedMilliAmps.available) {
-// test1.value = currentData.consumedMilliAmps.value ;
-// test1.available =  true ;
-// currentData.consumedMilliAmps.available = false ;
-//} 
-//#endif
-
-//#if defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && defined(ADS_CURRENT_BASED_ON)
-//if ( oXs_ads1115.adsCurrentData.MilliAmps.available) {
-// test2.value = oXs_ads1115.adsCurrentData.MilliAmps.value ;
-// test2.available =  true ;
-// oXs_ads1115.adsCurrentData.MilliAmps.available = false ;
-//} 
-//if ( oXs_ads1115.adsCurrentData.consumedMilliAmps.available) {
-// test3.value = oXs_ads1115.adsCurrentData.consumedMilliAmps.value ;
-// test3.available =  true ;
-// oXs_ads1115.adsCurrentData.consumedMilliAmps.available = false ;
-//} 
-//#endif
-
-//#if ( defined(AIRSPEED) && (defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined (ADS_MEASURE) && defined (ADS_AIRSPEED_BASED_ON) )
-//	if ( oXs_ads1115.adsAirSpeedData.airSpeed.available == true ) {
-//     test1.value = oXs_ads1115.adsAirSpeedData.airSpeed.value ;
-//	 test1.available = true ;
-//	 oXs_ads1115.adsAirSpeedData.airSpeed.available = false ;
-//	}
-//#endif
 
 } // end of calculate all fields
 
@@ -1215,7 +1092,7 @@ bool checkFreeTime() { // return true if there is no vario or if the vario senso
 }  // ******************************* end of checkFreeTime *****************************
 
 // ********************************** Calculate dTE based on rawAltitude and differential pressure
-#if defined (VARIO) && ( defined ( AIRSPEED) || ( defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined ( ADS_MEASURE ) && defined( ADS_AIRSPEED_BASED_ON ) ) ) 
+#if defined (VARIO) && ( defined ( AIRSPEED) || ( defined ( ADS_MEASURE ) && defined( ADS_AIRSPEED_BASED_ON ) ) ) 
 #define SMOOTHING_DTE_MIN SENSITIVITY_MIN
 #define SMOOTHING_DTE_MAX SENSITIVITY_MAX
 #define SMOOTHING_DTE_MIN_AT SENSITIVITY_MIN_AT
@@ -1245,8 +1122,8 @@ void calculateDte () {  // is calculated about every 2O ms each time that an alt
               // compensation (m/sec) = airspeed * airspeed / 2 / 9.81 =
               //                      = 2 * 287.05 * difPressureAdc * 0.061035156  * (temperature Celsius + 273.15) / pressure pa /2 /9.81 (m/sec) = 1.785947149 * difPressureAdc * Temp(kelv) / Press (Pa)
               // compensation (cm/sec) = 178.5947149 * difPressureAdc * Temp(kelv) / Press (Pa)
-//#define DEBUG_DTE
-#if defined  ( DEBUG_DTE ) && ( defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined ( ADS_MEASURE ) && defined( ADS_AIRSPEED_BASED_ON ) )
+#define DEBUG_DTE
+#if defined  ( DEBUG_DTE ) && ( defined ( ADS_MEASURE ) && defined( ADS_AIRSPEED_BASED_ON ) )
                   static bool firstDteData = true ;
                   if ( firstDteData ) {
                           Serial.println(F("at , difPressADC_0 , cnt , rawAlt , rawComp , rawEnerg ")) ;
@@ -1271,7 +1148,7 @@ void calculateDte () {  // is calculated about every 2O ms each time that an alt
   if (totalEnergyLowPass == 0) { 
     totalEnergyLowPass = totalEnergyHighPass = rawTotalEnergy ; 
   }
-#if defined  ( DEBUG_DTE ) && ( defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined ( ADS_MEASURE ) && defined( ADS_AIRSPEED_BASED_ON ) )
+#if defined  ( DEBUG_DTE ) && ( defined ( ADS_MEASURE ) && defined( ADS_AIRSPEED_BASED_ON ) )
                   Serial.print( oXs_MS5611.varioData.rawAltitude * 0.01 ); Serial.print(F(" , ")); 
                   Serial.print( rawCompensation ); Serial.print(F(" , ")); 
                   Serial.print( rawTotalEnergy ); Serial.print(F(" , "));
@@ -1328,7 +1205,7 @@ void calculateDte () {  // is calculated about every 2O ms each time that an alt
 #endif    
    
 } // end calculateDte  
-#endif    // #if defined (VARIO) ( defined ( AIRSPEED) || ( defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined ( ADS_MEASURE ) && defined( ADS_AIRSPEED_BASED_ON ) ) )  
+#endif    // #if defined (VARIO) ( defined ( AIRSPEED) || ( defined ( ADS_MEASURE ) && defined( ADS_AIRSPEED_BASED_ON ) ) )  
 // ***************************** end calculate Dte ***********************************************
 
 
@@ -1503,7 +1380,7 @@ void checkButton() {
     // Do Something after certain times the button has been pressed for....
     if( (buttonPressDuration>=100) and (buttonPressDuration<3000) )
       Reset1SecButtonPress();
-    else if( (buttonPressDuration>=3000) and (buttonPressDuration<8000) )
+    else if( (buttonPressDuration>=3000) and (buttonPressDuration<5000) )
       Reset3SecButtonPress();
     //else if( (buttonPressDuration>=5000) and (buttonPressDuration<10000) )
     else if( (buttonPressDuration>=10000) and (buttonPressDuration<15000) )
@@ -1520,7 +1397,7 @@ void Reset1SecButtonPress()
   Serial.println(F(" Reset 0.1-3 sec"));
 #endif
 
-#if defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES)
+#ifdef PIN_CURRENTSENSOR
   struct CURRENTDATA *cd = &oXs_Current.currentData ;
 //  FORCE_INDIRECT(cd) ;
 //  cd->maxMilliAmps=cd->milliAmps;
@@ -1542,14 +1419,9 @@ void Reset3SecButtonPress()
 #ifdef DEBUG
   Serial.println(F(" Reset 3-5 sec"));
 #endif
-#if defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES)
-  oXs_Current.resetValues();
-#elif defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined (ADS_MEASURE)  && defined (ADS_CURRENT_BASED_ON)
-  oXs_ads1115.floatConsumedMilliAmps = 0 ;
-  oXs_ads1115.adsCurrentData.consumedMilliAmps.value = 0 ;
-#endif
-#if defined ( A_FLOW_SENSOR_IS_CONNECTED ) && ( A_FLOW_SENSOR_IS_CONNECTED == YES)
-  consumedML = 0 ;
+#ifdef PIN_CURRENTSENSOR
+  oXs_Current.currentData.consumedMilliAmps = 0;
+  oXs_Current.currentData.floatConsumedMilliAmps = 0 ;
 #endif
 }
 
@@ -1564,141 +1436,157 @@ void Reset10SecButtonPress()
 
 
 
-#if defined (SAVE_TO_EEPROM ) and ( SAVE_TO_EEPROM == YES )
+#ifdef SAVE_TO_EEPROM
 /****************************************/
 /* SaveToEEProm => save persistant Data */
 /****************************************/
 void SaveToEEProm(){
-  static uint8_t caseWriteEeprom = 0;
-#define CASE_MAX_EEPROM 2  // to adapt if thee are more data to save.   
+  static byte state=0;
+  static int adr=0;
+#define ADR_MAX 0   
 #ifdef DEBUG
-  Serial.print(F("Saving to EEProm:"));    
-  Serial.println(caseWriteEeprom);    
+  Serial.print(F("SAving to EEProm:"));    
+  Serial.println(state);    
 #endif
-  switch (caseWriteEeprom ) {
-#if defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES)
-  case 0 :
-    EEPROM_writeAnything( 0 , oXs_Current.currentData.consumedMilliAmps);
-    break ;
-#endif
-#if defined ( A_FLOW_SENSOR_IS_CONNECTED ) && ( A_FLOW_SENSOR_IS_CONNECTED == YES) 
-  case ( 1 ) : 
-    if ( ((uint16_t) consumedML) != consumedMLEeprom ) {                            // write in EEPROM only if there is a change
-      consumedMLEeprom = consumedML ;  
-      EEPROM_writeAnything( 4 , consumedMLEeprom );
-    }   
-    break;  
-  case ( 2 ) : 
-    if ( tankCapacity != tankCapacityEeprom ) {                            // write in EEPROM only if there is a change
-      tankCapacityEeprom = tankCapacity ; 
-      EEPROM_writeAnything( 8 , tankCapacityEeprom ); 
-    }
-    for (uint8_t idxWrite = 0 ; idxWrite < 8 ; idxWrite++ ) { 
-      if ( flowParam[idxWrite] != flowParamEeprom[idxWrite] ) {
-        flowParamEeprom[idxWrite] = flowParam[idxWrite] ;
-        EEPROM_writeAnything( 12 + (idxWrite * 4 ) , flowParamEeprom[idxWrite] ); 
-      }
-    }
-    break;  
-#endif  // end A_FLOW_SENSOR_IS_CONNECTED
-  }     // end of switch
-  caseWriteEeprom++;
-  if(caseWriteEeprom > CASE_MAX_EEPROM) caseWriteEeprom = 0;
+#ifdef PIN_CURRENTSENSOR
+  switch (state){
+  case 0:
+    adr+=EEPROM_writeAnything(adr, oXs_Current.currentData.consumedMilliAmps);
+//  case 1:
+//    adr+=EEPROM_writeAnything(adr, oXs_Current.currentData.maxMilliAmps);
+//  case 2:
+//    adr+=EEPROM_writeAnything(adr, oXs_Current.currentData.minMilliAmps);
+//#endif // PIN_CURRENTSENSOR
 
-// to do : add values from ads1115 about current consumption; to do also in LoadFromEEprom()
-  
-} // end SaveToEEPom
+/*
+#ifdef VARIO
+  case 3:
+    adr+=EEPROM_writeAnything(adr, oXs_MS5611.varioData.maxRelAlt);
+  case 4:
+    adr+=EEPROM_writeAnything(adr, oXs_MS5611.varioData.minRelAlt);
+  case 5:
+    adr+=EEPROM_writeAnything(adr, oXs_MS5611.varioData.maxAbsAlt);
+  case 6:
+    adr+=EEPROM_writeAnything(adr, oXs_MS5611.varioData.minAbsAlt);
+  case 7:
+    adr+=EEPROM_writeAnything(adr, oXs_MS5611.varioData.maxClimbRate);
+  case 8:
+    adr+=EEPROM_writeAnything(adr, oXs_MS5611.varioData.minClimbRate);
+#endif //VARIO
+*/
+  }
+#endif // PIN_CURRENTSENSOR
+  state++;
+  if(state > ADR_MAX){
+    state=0;
+    adr=0;
+  }
+}
 
 /******************************************/
 /* LoadFromEEProm => load persistant Data */
 /******************************************/
 void LoadFromEEProm(){
-  // Load the last saved value
-#if defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES)
-  EEPROM_readAnything( 0 , oXs_Current.currentData.consumedMilliAmps);
-  #ifdef DEBUG
-    Serial.println(F("Restored consumed mA"));
-  #endif  
+  int adr=0;
+
+  // Store the last known value to the eeprom
+  Serial.println(F("Restored from EEProm:"));
+#ifdef PIN_CURRENTSENSOR
+  adr+=EEPROM_readAnything(adr, oXs_Current.currentData.consumedMilliAmps);
+  oXs_Current.currentData.floatConsumedMilliAmps = oXs_Current.currentData.consumedMilliAmps ;
+  Serial.print(F(" mAh="));    
+  Serial.print( oXs_Current.currentData.consumedMilliAmps);
+
+//  adr+=EEPROM_readAnything(adr, oXs_Current.currentData.maxMilliAmps);
+//  Serial.print(F(" maxMilliAmps="));    
+//  Serial.print( oXs_Current.currentData.maxMilliAmps);
+
+//  adr+=EEPROM_readAnything(adr, oXs_Current.currentData.minMilliAmps);
+//  Serial.print(F(" minMilliAmps="));    
+//  Serial.print( oXs_Current.currentData.minMilliAmps);
 #endif
-#if defined ( A_FLOW_SENSOR_IS_CONNECTED ) && ( A_FLOW_SENSOR_IS_CONNECTED == YES ) 
-    EEPROM_readAnything(4, consumedMLEeprom  ) + 4 ;
-    consumedML = consumedMLEeprom  ; 
-    EEPROM_readAnything( 8, tankCapacityEeprom  );
-    tankCapacity = tankCapacityEeprom ;
-    for (uint8_t idxRead = 0 ; idxRead < 8 ; idxRead++ ) {
-        EEPROM_readAnything( 12 + ( idxRead * 4) , flowParamEeprom[idxRead] );
-        flowParam[idxRead] = flowParamEeprom[idxRead] ;
-    }
-    checkFlowParam() ;
-  #ifdef DEBUG  
-    Serial.print(F("Restored consumed= ")); Serial.print(consumedMLEeprom) ; Serial.print(F("  Tank=")) ; Serial.print(tankCapacityEeprom) ; Serial.print(F(" Param=")) ;
-    for (uint8_t idxRead = 0 ; idxRead < 8 ; idxRead++ ) {
-      Serial.print(flowParamEeprom[idxRead]) ; Serial.print(" ") ;  
-    }
-   Serial.println(" ");
-   
-   Serial.print(F("          consumed= ")); Serial.print(consumedML) ; Serial.print(F("  Tank=")) ; Serial.print(tankCapacity) ; Serial.print(F(" Param=")) ;
-    for (uint8_t idxRead = 0 ; idxRead < 8 ; idxRead++ ) {
-      Serial.print(flowParam[idxRead]) ; Serial.print(" ") ;  
-    }
-   Serial.println(" ");
-  #endif  
-#endif
+/*
+#ifdef VARIO
+  adr+=EEPROM_readAnything(adr, oXs_MS5611.varioData.maxRelAlt);
+  Serial.print(F(" maxRelAlt="));    
+  Serial.print( oXs_MS5611.varioData.maxRelAlt);
+
+  adr+=EEPROM_readAnything(adr, oXs_MS5611.varioData.minRelAlt);
+  Serial.print(F(" minRelAlt="));    
+  Serial.print( oXs_MS5611.varioData.minRelAlt);
+
+
+  adr+=EEPROM_readAnything(adr, oXs_MS5611.varioData.maxAbsAlt);
+  Serial.print(F(" maxAbsAlt="));    
+  Serial.print( oXs_MS5611.varioData.maxAbsAlt);
+
+  adr+=EEPROM_readAnything(adr, oXs_MS5611.varioData.minAbsAlt);
+  Serial.print(F(" minAbsAlt="));    
+  Serial.print( oXs_MS5611.varioData.minAbsAlt);
+
+  adr+=EEPROM_readAnything(adr, oXs_MS5611.varioData.maxClimbRate);
+  Serial.print(F(" minClimbRate="));    
+  Serial.print( oXs_MS5611.varioData.minClimbRate);
+
+  adr+=EEPROM_readAnything(adr, oXs_MS5611.varioData.minClimbRate);
+  Serial.print(F(" maxClimbRate="));    
+  Serial.print( oXs_MS5611.varioData.maxClimbRate);
+#endif //VARIO
+*/
 }
-#endif //SAVE_TO_EEPROM
+#endif //saveToEeprom
 
 
 /***************************************************************/
 /* ProcessPPMSignal => read PPM signal from receiver and       */
 /*   use its value to adjust sensitivity and other parameters  */
 /***************************************************************/
-#if defined ( PIN_PPM ) || (  defined ( PPM_VIA_SPORT ) && ( (PROTOCOL  == FRSKY_SPORT) || (PROTOCOL  == FRSKY_SPORT_HUB) ) )
+#ifdef PIN_PPM
 volatile uint16_t time1 ;
+//uint16_t time3 ;
 void ProcessPPMSignal(){
-  boolean getNewPpm = false ; // become true if a new ppm value has been acquired  
-#if defined( PIN_PPM )  // when ppm is read from a rx channel
-  ReadPPM(); // set ppmus to 0 if ppm is not available or has not been collected X time, other fill ppmus with the (max) pulse duration in usec 
+//#ifdef DEBUGPPM
+//    if ( ppmInterruptedCopy > 0)  {
+//        Serial.print(F("I= ")); Serial.println(ppmInterruptedCopy) ;
+//    }  
+//#endif
+  ReadPPM(); // set ppmus to 0 if ppm is not available or has not been colletect X time, other fill ppmus with the (max) pulse duration in usec 
 #ifdef DEBUGFORCEPPM
 //for debuging ppm without having a connection to ppm; force ppm to a value
   ppmus = ( PPM_MIN_100 + PPM_PLUS_100) / 2 ; // force a ppm equal to 0 (neutral)
 #endif // end of DEBUGFORCEPPM 
   if (ppmus>0){  // if a value has been defined for ppm (in microseconds)
     ppm.value = map( ppmus , PPM_MIN_100, PPM_PLUS_100, -100 , 100 ) ; // map ppm in order to calibrate between -100 and 100
+//    ppm = 82 ; // test only
     ppm.available = true ;
-    getNewPpm = true ;
-  } 
-#else   // so when done via SPORT (defined ( PPM_VIA_SPORT ) && ( PROTOCOL  == FRSKY_SPORT ) || (PROTOCOL  == FRSKY_SPORT_HUB) ) )
-        // newPpm.value and .available are already filled in readSensor() when new values are received
-      if (newPpm.available ){
-          ppm.value = newPpm.value ;
-          ppm.available = true ;
-          newPpm.available = false ;
-          getNewPpm = true ;
-      }
-#endif  
-  if  (getNewPpm ) { 
-    getNewPpm = false ; // reset the indicator saying there is a new ppm to handle. 
 #ifdef DEBUGPPMVALUE
-       Serial.print(micros()); Serial.print(F(" ppm="));  Serial.println(ppm.value);
+       Serial.print(micros()); Serial.print(F("="));  Serial.println(ppm.value);
 #endif
+      
+#ifdef DEBUGPPM
+    static uint16_t ppmCount ;
+    if ( (((int) ppm.value) - ((int ) prevPpm) > 3 ) || (((int) prevPpm) - ((int ) ppm.value) > 3 )  )  {
+        Serial.print(F(" us="));  Serial.print(ppmus); Serial.print(F(" c="));  Serial.println(ppmCount);
+        ppmCount = 0 ;
+    }  else {
+      ppmCount++;
+    }  
+#endif
+
 #ifdef SEQUENCE_OUTPUTS
     if ( ( ( ppm.value - prevPpm) > 3 ) || (( prevPpm - ppm.value) > 3 )  )  { // handel ppm only if it changes by more than 3 
-        prevPpm = ppm.value ;
         setNewSequence( ) ;
     }  
 #else // so if Sequence is not used and so PPM is used for Vario sensitivity , vario compensation , airspeed reset , glider ratio and/or vario source selection 
-    if ( ( ( ppm.value - prevPpm) < 4 ) && ( ( prevPpm - ppm.value) < 4 ) ) {  // test if new value is quite close to previous in order to avoid unstabel handling 
+    if (ppm.value == prevPpm) {  // test if new value is equal to previous in order to avoid unstabel handling 
     
-#if defined ( VARIO_PRIMARY) && defined ( VARIO_SECONDARY)  && defined (VARIO ) && ( defined (VARIO2) || ( defined ( AIRSPEED) || ( defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined ( ADS_MEASURE ) && defined( ADS_AIRSPEED_BASED_ON ) ) )  || defined (USE_6050) )  && defined (PIN_PPM)
+#if defined ( VARIO_PRIMARY) && defined ( VARIO_SECONDARY)  && defined (VARIO ) && ( defined (VARIO2) || ( defined ( AIRSPEED) || ( defined ( ADS_MEASURE ) && defined( ADS_AIRSPEED_BASED_ON ) ) )  || defined (USE_6050) )  && defined (PIN_PPM)
         if ( (ppm.value >= (SWITCH_VARIO_MIN_AT_PPM - 4)) && (ppm.value <= (SWITCH_VARIO_MAX_AT_PPM + 4)) ) {
           selectedVario = VARIO_PRIMARY ;
         } else if ( ( ppm.value <= (4 - SWITCH_VARIO_MIN_AT_PPM)) && (ppm.value >= (- 4 - SWITCH_VARIO_MAX_AT_PPM)) ) {
             selectedVario = VARIO_SECONDARY ; 
         }  
-#ifdef DEBUG_SELECTED_VARIO
-    Serial.print(F("selected vario="));  Serial.println(selectedVario);
 #endif
-#endif // endif defined ( VARIO_PRIMARY) && defined ( VARIO_SECONDARY)  && ...
 
 #if defined (VARIO) || defined (VARIO2) 
         if ( (abs(ppm.value) >= (SENSITIVITY_MIN_AT_PPM - 4)) && ( abs(ppm.value) <= (SENSITIVITY_MAX_AT_PPM + 4)) ) {
@@ -1713,7 +1601,7 @@ void ProcessPPMSignal(){
 #endif  // end else defined (VARIO) || defined (VARIO2) 
         
 
-#if ( defined ( AIRSPEED) || ( defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined ( ADS_MEASURE ) && defined( ADS_AIRSPEED_BASED_ON ) ) )   // adjust compensation
+#if ( defined ( AIRSPEED) || ( defined ( ADS_MEASURE ) && defined( ADS_AIRSPEED_BASED_ON ) ) )   // adjust compensation
         if ( (abs(ppm.value) >= (COMPENSATION_MIN_AT_PPM - 4)) && ( abs(ppm.value) <= (COMPENSATION_MAX_AT_PPM + 4)) ) {
             compensationPpmMapped =  map( constrain(abs(ppm.value), COMPENSATION_MIN_AT_PPM , COMPENSATION_MAX_AT_PPM ), COMPENSATION_MIN_AT_PPM , COMPENSATION_MAX_AT_PPM , COMPENSATION_PPM_MIN , COMPENSATION_PPM_MAX); // map value and change stepping to 10
             if (compensationPpmMapped == COMPENSATION_PPM_MIN ) compensationPpmMapped = 0 ; // force compensation to 0 when compensation = min
@@ -1725,14 +1613,7 @@ void ProcessPPMSignal(){
             oXs_ads1115.adsAirSpeedData.airspeedReset = true ; // allow a recalculation of offset mvxp7002 connected to ads1115
 #endif
         }    
-#endif  // end AIRSPEED or  ADS_AIRSPEED_BASED_ON
-
-#if defined ( A_FLOW_SENSOR_IS_CONNECTED ) && ( A_FLOW_SENSOR_IS_CONNECTED == YES)  
-        if ( ( ppm.value >= (FLOW_SENSOR_RESET_AT_PPM - 4)) && ( ppm.value <= (FLOW_SENSOR_RESET_AT_PPM + 4)) ) {
-            consumedML = 0 ;     // reset the flow counter
-        }
 #endif
-
 
 #if defined (GLIDER_RATIO_CALCULATED_AFTER_X_SEC ) && defined ( GLIDER_RATIO_ON_AT_PPM )
          if ( (ppm.value >= (GLIDER_RATIO_ON_AT_PPM - 4)) && (ppm.value <= (GLIDER_RATIO_ON_AT_PPM + 4)) ) {
@@ -1743,10 +1624,9 @@ void ProcessPPMSignal(){
 #endif    
     
     } // end ppm == prePpm
-    prevPpm = ppm.value ;  
 #endif  // end of #ifdef SEQUENCE_OUTPUTS & #else
-  }  // end if  (ppm.available ) 
-  
+  }  // end ppm > 0
+  prevPpm = ppm.value ;
 }  // end processPPMSignal
 
 
@@ -1768,16 +1648,15 @@ ISR(INT0_vect, ISR_NOBLOCK)  // NOBLOCK allows other interrupts to be served whe
 ISR(INT1_vect, ISR_NOBLOCK)
 #endif
 {
-	uint8_t oReg = SREG; // store SREG value 
 	cli() ;
 	uint16_t time = TCNT1 ;	// Read timer 1
-	SREG = oReg ; // restore SREG value
+	sei() ;
 	if ( EICRA & PPM_INT_EDGE ) // a rising edge occurs
 	{
-		StartTime = time ;              // save the value of the timer
+		StartTime = time ;
 		EICRA &= ~PPM_INT_EDGE ;				// allow a falling edge to generate next interrupt
 	}
-	else                       // a falling edge occurs   
+	else
 	{
 //		EndTime = time ;		
 		time -= StartTime ;
@@ -1793,7 +1672,7 @@ ISR(INT1_vect, ISR_NOBLOCK)
 		
 //                if (  ppmInterrupted == 0  ) { // do not handle PulseTime if pin change interrupt has been delayed by another interrupt (Timer 1 compare A handling)
 		  time1 = time ; 
-      PulseTimeAvailable = true ;
+                  PulseTimeAvailable = true ;
 //		} else {
 //                ppmInterruptedCopy++ ;  // used in order to test the value outside ISR
 //                }
@@ -1802,32 +1681,26 @@ ISR(INT1_vect, ISR_NOBLOCK)
 	}
 }
 
-void ReadPPM() {    // set ppmus to 0 if ppm is not available or has not been collected X time, other fill ppmus with the (max) pulse duration in usec 
+void ReadPPM() {
          static uint8_t ppmIdx ;
          static uint16_t ppmTemp ;
          static uint16_t ppmMax ; // highest value of ppmTemp received ; Some ppm measurement are wrong (to low) because there are some interrupt some 
-         ppmus = 0 ;
-#if defined DEBUG_PPM_AVAILABLE_FROM_INTERRUPT
-        Serial.print("Read ppm at ") ; Serial.println(millis()) ;
-#endif
-
-         if ( PulseTimeAvailable ) { // if new pulse is available
-#define PPM_COUNT_MAX 5 // select the max of 5 ppm (so once every 100 msec
-           uint8_t oReg = SREG ; // save Status register
-           cli() ; 
-            ppmTemp = time1 ;    // use values from interrupt
+#define PPM_COUNT_MAX 10 // select the max of 10 ppm
+        cli() ;
+        if ( !PulseTimeAvailable ) { // if no new pulse is available just exit with ppmus = 0
+              ppmus = 0 ;
+              sei() ;  
+        } else { 
+            ppmTemp = time1 ; 
             PulseTimeAvailable = false ;
-            SREG = oReg ;  // restore Status register  
-#if defined DEBUG_PPM_AVAILABLE_FROM_INTERRUPT
-        Serial.print("ppm time1= ") ; Serial.println(time1) ;
-#endif
+            sei() ;
             if ( ppmIdx >= PPM_COUNT_MAX ) {
                 ppmus = ppmMax ; // we keep the highest value
                 ppmIdx = 0 ;
                 ppmMax = ppmTemp ; 
             } else {
                 ppmIdx++ ;
-                if( ppmTemp > ppmMax ) ppmMax = ppmTemp ;  // save the highest value
+                if( ppmTemp > ppmMax ) ppmMax = ppmTemp ;  
             }  // end test on ppmIdx   
         } // end test on PulseTimeAvailable
 } //end ReadPPM()
@@ -1835,90 +1708,6 @@ void ReadPPM() {    // set ppmus to 0 if ppm is not available or has not been co
 
 #endif //PIN_PPM
 
-
-#if defined ( A_FLOW_SENSOR_IS_CONNECTED )
-  #if ( A_FLOW_SENSOR_IS_CONNECTED == YES)  // flowMeterCnt is updated by interrupt PCINT0 
-
-
-
-float mapFlowCorr( uint8_t idx) {                             // calculate correction factor depending on current flow
-  uint8_t flowCorrIdx = idx + TX_FIELD_FLOW_CORR_1 ;
-  return ( flowParam[flowCorrIdx ] + ( currentFlow - flowParam[idx]) / (flowParam[idx + 1] - flowParam[idx]) * (flowParam[flowCorrIdx + 1] - flowParam[flowCorrIdx ] ) ) ;
-}
-  
-void checkFlowParam() {
-  if ( (tankCapacity % 50) != 0) tankCapacity = ( tankCapacity / 50 ) * 50 ; // set tank capacity in steps of 50 ml
-  tankCapacity = constrain( tankCapacity , 100 , 3000 ) ;
-  for (uint8_t i = 0; i < 4 ; i++) {
-      if ( ( flowParam[i] % 5) != 0 ) flowParam[i] = ( flowParam[i] / 5 ) * 5 ;
-      flowParam[i] = constrain( flowParam[i] , 30 , 800 + (5 * i)) ;
-      flowParam[ i+ 4] = constrain( flowParam[i+4] , -100 , +100 ) ;
-  }
-  for (uint8_t i= 1 ; i < 4 ; i++) {
-      if ( flowParam[i] <= flowParam[i - 1] )  flowParam[i] = flowParam[i - 1] + 5 ;
-  }
-}
-
-void processFlowMeterCnt () {    // get the flowmeter counter once per X seconds, convert it in mili liter and activate the flag saying a new value is available
-                                 // save the result in eeprom is done in main loop for all data to be saved in EEPROM
-#define FLOW_DELAY 2000                                   // calculates once per 2 sec
-  float flowCorr ;
-  uint16_t flowMeterCntCopy ;
-  static uint32_t prevFlowMillis ;
-  uint32_t currentFlowMillis = millis() ;
-  if ( ( currentFlowMillis - prevFlowMillis ) > FLOW_DELAY ) {   
-    prevFlowMillis = currentFlowMillis ;
-    uint8_t oReg = SREG ; // save status register
-    cli() ;  // avoid interrupt to ensure that counter is consistent
-    flowMeterCntCopy = flowMeterCnt ; 
-    flowMeterCnt = 0 ;
-    SREG = oReg ; // restore status register
-    sei() ;  // allow interrupt again
-#ifdef DEBUG_SIMULATE_FLOW_SENSOR
-    flowMeterCntCopy = 100 ;        // force a fix value in order to test without a flow sensor
-#endif    
-#define CONVERT_TO_ML_PER_MIN  30.0 / ( PULSES_PER_ML * FLOW_DELAY / 1000.0 ) //  30 = 60 /2 : 60 = 60 sec/min, 1000 = msec instead of sec , 2 because counter is increased by all changes (rise and fall)
-    currentFlow  =  ((float) flowMeterCntCopy) * CONVERT_TO_ML_PER_MIN ;                                          // expected value should be between 15 and 800 ml/min for the conrad flow meter   
-    if (currentFlow < flowParam[TX_FIELD_FLOW_1] ) {
-      flowCorr = flowParam[TX_FIELD_FLOW_CORR_1] ;               // flow crrection is supposed to be in %
-    } else if (currentFlow < flowParam[TX_FIELD_FLOW_2] ) { 
-      flowCorr = mapFlowCorr(  TX_FIELD_FLOW_1 ) ;
-    } else if (currentFlow < flowParam[TX_FIELD_FLOW_3] ) { 
-      flowCorr = mapFlowCorr(  TX_FIELD_FLOW_2 ) ;
-    } else if (currentFlow < flowParam[TX_FIELD_FLOW_4] ) { 
-      flowCorr = mapFlowCorr(  TX_FIELD_FLOW_3 ) ;
-    }  else {
-      flowCorr = flowParam[TX_FIELD_FLOW_CORR_4] ;
-    }  
-    currentFlow = ((float) currentFlow ) * ( 100.0 + flowCorr) * 0.01   ; // 0.01 because flowCorr is in %)  
-    actualFlow.value = currentFlow ;
-    actualFlow.available= true ;
-    consumedML += currentFlow  * FLOW_DELAY / 60000.0 ; 
-    if ( consumedML > tankCapacity ) consumedML = tankCapacity ;
-    remainingFuelML.value = tankCapacity - consumedML ;
-    remainingFuelML.available= true ;
-    fuelPercent.value =  remainingFuelML.value * 100 / tankCapacity ; // in percent
-    fuelPercent.available= true ;
-    newFlowAvailable = true ;   // this is use to fill TEST_1, 2, 3 to avoid conflict with JETI protocol which uses 3 individual flags 
-#if defined ( DEBUG) && defined (DEBUG_FLOW_SENSOR)
-    Serial.print(" At " ); Serial.print( prevFlowMillis ) ;
-    Serial.print(" flcnt " ); Serial.print( flowMeterCntCopy ) ;
-    Serial.print(" remain " ); Serial.print( remainingFuelML.value ) ;
-    Serial.print(" ml/min " ); Serial.print( currentFlow ) ;
-    Serial.print(" cons " ); Serial.println( consumedML ) ;
-#endif
-  
-  } 
-}      // end processFlowMeterCnt
-
-
-ISR(PCINT0_vect, )  {       // a pin change interrupt occurs on the pin being connected to the flow sensor; we do not use ISR_NOBLOCK because the interrupt is very short
-  flowMeterCnt++ ;            // we increase the counter of pin change.
-}
-
-
-  #endif
-#endif // end A_FLOW_SENSOR_IS_CONNECTED 
 
 
 
@@ -1932,7 +1721,7 @@ void setNewSequence() {                   // **********  setNewSequence( ) *****
 #ifdef DEBUGSEQUENCE
     Serial.println(F(" "));
     Serial.print(F("ppmMain="));  Serial.println(ppmMain );  
-    //Serial.println(F(" "));
+    Serial.println(F(" "));
 #endif
        prevPpmMain = ppmMain ;
        seqRef = sequencePointer[ppmMain] ;  // seqTab contains pointers to the sequence array
@@ -1992,8 +1781,7 @@ void checkSequence() {
           nextSequenceMillis = currentMillis  +  seqDelay ;
       }
 #ifdef DEBUGSEQUENCE
-      Serial.print(F("At"));  Serial.print( currentMillis );
-      Serial.print(F(" seqStep="));  Serial.println( seqStep );
+      Serial.print(F("seqStep="));  Serial.println( seqStep );
       Serial.print(F("portbTempValue="));  Serial.println( portbTempValue );
       Serial.print(F("seqDelay="));  Serial.println( seqDelay );
       Serial.print(F("portbTemp="));  Serial.println( portbTemp );
@@ -2028,13 +1816,13 @@ void OutputToSerial(){
   Serial.print((float)oXs_MS5611.varioData.temperature/10);
 #endif // VARIO
 
-#if defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES)
+#ifdef PIN_CURRENTSENSOR
   Serial.print(F(" ;mA="));    
   Serial.print( ( ((float)(int32_t)(oXs_Current.currentData.milliAmps.value))) );
   Serial.print("(");    
   Serial.print(F(" ;mAh="));  
   Serial.print( oXs_Current.currentData.consumedMilliAmps.value);
-#endif // defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES)
+#endif // PIN_CURRENTSENSOR
 #ifdef HOTT
   Serial.println("H.");
 #endif  

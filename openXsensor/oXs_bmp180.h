@@ -37,8 +37,10 @@ public:
   OXS_BMP180( void ) ;
 #endif
   VARIODATA varioData ;
+  //int64_t rawPressure; // in 1/10000 mBar
   void setup();
   bool  readSensor();
+
   void resetValues();
 
 private:
@@ -74,12 +76,14 @@ private:
     unsigned long nextAverageAltMillis  ; // save when AverageAltitude has to be calculated
       
     float climbRate2AltFloat  ;
+    
     float abs_deltaClimbRate ;
       
 #ifdef DEBUG
   HardwareSerial* printer;
 #endif
 }; // end class OXS_MS5611
+
 
 #endif // OXS_BMP180
 

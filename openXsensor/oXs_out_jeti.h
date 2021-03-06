@@ -42,9 +42,7 @@ struct t_mbAllData {
 
 #define JETI14_0D 0b00000001  // 0 decimal, jeti TYpe = 1
 #define JETI14_1D 0b00100001  // 1 decimal, jeti TYpe = 1  
-#define JETI14_2D 0b01000001  // 2 decimal, jeti TYpe = 1
-#define JETI22_0D 0b00000100  // 0 decimal, jeti TYpe = 1
-#define JETI22_1D 0b00100100  // 1 decimal, jeti TYpe = 1
+#define JETI14_2D 0b01000001  // 2 decimal, jeti TYpe = 1  
 #define JETI_GPS  0b00001001  // special GPS format in 4 bytes, type = 9 in decimal
 
 //  This is the list of oXs codes for each available measurements
@@ -90,10 +88,6 @@ struct t_mbAllData {
 #define ALTIMETER_MAX     40
 #define GPS_LONG          41
 #define GPS_LAT           42
-#define FLOW_ACTUAL       43
-#define FLOW_REMAIN       44
-#define FLOW_PERCENT      45
-#define TEMPERATURE       46
 // to do : add alt min, alt max ,  rpm max? , current max (not sure that it is neaded because it can be calculated on TX side
 // End of list of type of available measurements
 
@@ -173,8 +167,6 @@ extern struct ONE_MEASUREMENT roll ;
 extern volatile uint16_t RpmValue ;
 extern bool RpmAvailable ;
 #endif // MEASURE_RPM
-
-extern OXS_ADS1115 oXs_ads1115 ;
 
 extern volatile uint8_t debug01 ;
 extern volatile uint8_t debug02 ;
@@ -306,8 +298,6 @@ extern int16_t GPS_bearing ;
 #define NOT_AVAILABLE  1
 #define LOCKED         2
 #define AVAILABLE      3
-
-// Jeti protocol is 9 bits, 2 stops bits, odd parity, 9600-9800 bauds
 
 
 #endif // End of JETI

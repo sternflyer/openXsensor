@@ -1,7 +1,5 @@
 #include "oXs_ms5611.h"
 
-#if defined(SENSOR_IS_MS5611) 
-
 #ifdef DEBUG
 //#define DEBUGI2CMS5611
 //#define DEBUG_VARIO_DATA
@@ -32,7 +30,7 @@ OXS_MS5611::OXS_MS5611(uint8_t addr)
   // constructor
   _addr=addr;
   varioData.SensorState = 0 ;
-#ifdef DEBUG  
+#ifdef DEBUGVARIO  
   printer = &print; //operate on the address of print
 //  printer->begin(115200);
 //  printer->print("Vario Sensor:MS5611 I2C Addr=");
@@ -85,10 +83,10 @@ void OXS_MS5611::setup() {
   printer->println(millis());
 
 #endif
+  
   I2c.begin() ;
-  I2c.timeOut(80); //initialise the time out in order to avoid infinite loop
+  I2c.timeOut( 80); //initialise the time out in order to avoid infinite loop
 #ifdef DEBUGI2CMS5611
-  printer->println(F("begin I2C scan"));
   I2c.scan() ;
   printer->print(F("last I2C scan adr: "));
   printer->println( I2c.scanAdr , HEX  );
@@ -149,7 +147,7 @@ bool OXS_MS5611::readSensor() {   // read sensor performs a read from sensor if 
   unsigned long varioEnter = micros() ;
 #endif  
     bool newVSpeedCalculated = false ; 
-    if ( ( micros()  - varioData.lastCommandMicros )> WAIT_I2C_TIME )   { // wait 9 msec at least before asking for reading the pressure
+    if ( micros()  >   (varioData.lastCommandMicros + WAIT_I2C_TIME) )  { // wait 9 msec at least before asking for reading the pressure
         long result = 0 ;
         if(  ! I2c.read( _addr, 0, 3 )) { ; //read 3 bytes from the device after sending a command "00";  
           result = I2c.receive() ;
@@ -321,7 +319,6 @@ void OXS_MS5611::calculateVario() {
       
 } // End of calculateVario
 
-#endif // en of #if defined(SENSOR_IS_MS5611)
 
 /*
 void OXS_MS5611::readSensor() {

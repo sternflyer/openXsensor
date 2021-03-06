@@ -81,7 +81,7 @@ void OXS_OUT::setup() {
        multiplexData.mbData[fieldContainsData[mbIndex][0]].active = AVAILABLE ;
      }  
 
-// for debug purpose only
+// for defug purpose only
 multiplexData.mbData[15].response[0] = 0xF0 ;
 multiplexData.mbData[15].response[1] = 0x0F ;
 multiplexData.mbData[15].response[2] = 0xAA ;
@@ -240,7 +240,7 @@ uint8_t OXS_OUT::formatOneValue( uint8_t currentFieldToSend) {
 //        break ;
 //#endif  // End defined (VARIO) && defined ( AIRSPEED)
 
-#if defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES)
+#ifdef PIN_VOLTAGE
       case VOLT_1 :  
          if (! voltageData->mVolt[0].available  ) return 0;
          valueTemp = voltageData->mVolt[0].value / 100;
@@ -273,7 +273,7 @@ uint8_t OXS_OUT::formatOneValue( uint8_t currentFieldToSend) {
           break ;
 #endif
 
-#if defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES)
+#if defined (PIN_CURRENTSENSOR)
       case CURRENTMA :
          if ( ! currentData->milliAmps.available  ) return 0;
          valueTemp = currentData->milliAmps.value /100;
@@ -286,7 +286,7 @@ uint8_t OXS_OUT::formatOneValue( uint8_t currentFieldToSend) {
          break ;
 #endif
 
-#if defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) && (NUMBEROFCELLS > 0)     //  This part has still to be adapted for Multiplex !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#if (NUMBEROFCELLS > 0)     //  This part has still to be adapted for Multiplex !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       case  CELL_1 :
           if ( ! voltageData->mVoltCell_Available[0]  ) return 0;
           valueTemp =  voltageData->mVoltCell[0] /100 ; 
@@ -342,11 +342,7 @@ uint8_t OXS_OUT::formatOneValue( uint8_t currentFieldToSend) {
 #ifdef MEASURE_RPM 
       case  RPM :
           if ( ! sport_rpm.available  ) return 0;
-#if defined (PULSES_PER_ROTATION)
-          valueTemp  =  sport_rpm.value * 60.0 / PULSES_PER_ROTATION ;
-#else  // if PULSES_PER_ROTATION is not defined, we assume 1
-          valueTemp  =  sport_rpm.value * 60 ;
-#endif        
+          valueTemp = sport_rpm.value ;  // to adjust probably
           sport_rpm.available  = false ;
           break ;   
 #endif

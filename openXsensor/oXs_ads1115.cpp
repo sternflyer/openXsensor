@@ -5,8 +5,7 @@
   //#define DEBUGADS1115EACHREAD
   //#define DEBUGADS1115REQUESTCONV
   //#define DEBUGADS1115MVOLT
-  //#define DEBUGADSAIRSPEEDDATA
-  //#define DEBUGCURRENT 
+  //#define DEBUGADSAIRSPEEDDATA 
 #endif
 
 //#define DEBUG_FORCE_ADS_VOLT_1_4_WITHOUT_ADS1115
@@ -16,7 +15,7 @@ extern unsigned long micros( void ) ;
 extern unsigned long millis( void ) ;
 extern void delay(unsigned long ms) ;
 
-#if defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined( ADS_MEASURE) 
+#ifdef ADS_MEASURE 
   const uint8_t ads_Measure[4] = {ADS_MEASURE} ; //  how to configure the multiplexer
   const uint8_t ads_Gain[4] = { ADS_FULL_SCALE_VOLT }; //  how to configure the programmable gain amplifier
   const uint8_t ads_Rate[4] = { ADS_RATE }; // how to configure the time of conversion
@@ -65,7 +64,7 @@ void OXS_ADS1115::setup() {
   ads_Counter[2] = ads_MaxCount[2] ;
   ads_Counter[3] = ads_MaxCount[3] ;
   
-#if defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && defined(ADS_CURRENT_BASED_ON)
+#if defined(ADS_MEASURE) && defined(ADS_CURRENT_BASED_ON)
   adsCurrentData.milliAmps.available = false ;
   adsCurrentData.consumedMilliAmps.available = false ;
 #endif            
@@ -94,7 +93,7 @@ boolean OXS_ADS1115::readSensor() {  // return true when there is a new average 
       ads_SumOfConv[ads_CurrentIdx] = 0 ;            // reset the sum 
       ads_Counter[ads_CurrentIdx] = ads_MaxCount[ads_CurrentIdx] ;   // reset the counter to the number of count before averaging
       ads_Last_Conv_Idx = ads_CurrentIdx ;
-#if defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && defined(ADS_CURRENT_BASED_ON)
+#if defined(ADS_MEASURE) && defined(ADS_CURRENT_BASED_ON)
             if ( ads_CurrentIdx == ( ADS_CURRENT_BASED_ON - ADS_VOLT_1 ) ) ads_calculateCurrent() ;
 #endif            
 
@@ -105,9 +104,9 @@ boolean OXS_ADS1115::readSensor() {  // return true when there is a new average 
       printer->print(F(" val=")); printer->print(ads_Conv[ads_CurrentIdx].value);
       printer->println(" ");
 #endif
-             ads_requestNextConv() ;
-             return true ; 
-            }  
+      ads_requestNextConv() ;
+      return true ; 
+    }  
 #else  // normal code = when DEBUG_FORCE_ADS_VOLT_1_4_WITHOUT_ADS1115 is not activated
     if( I2CErrorCodeAds1115 == 0 ) { // if there is no error on previous I2C request
       I2CErrorCodeAds1115 = I2c.write(ads_Addr , 0X0 ) ; // send the Address, 0 = conversion register (in order to be able to read the conversion register)
@@ -151,7 +150,7 @@ boolean OXS_ADS1115::readSensor() {  // return true when there is a new average 
             ads_SumOfConv[ads_CurrentIdx] = 0 ;            // reset the sum 
             ads_Counter[ads_CurrentIdx] = ads_MaxCount[ads_CurrentIdx] ;   // reset the counter to the number of count before averaging
             ads_Last_Conv_Idx = ads_CurrentIdx ;
-#if defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && defined(ADS_CURRENT_BASED_ON)
+#if defined(ADS_MEASURE) && defined(ADS_CURRENT_BASED_ON)
             if ( ads_CurrentIdx == ( ADS_CURRENT_BASED_ON - ADS_VOLT_1 ) ) ads_calculateCurrent() ;
 #endif            
           }
@@ -195,9 +194,9 @@ void OXS_ADS1115::ads_requestNextConv(void) {
 } // end of Ads_requestNextConv
 
 
-#if defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && defined(ADS_CURRENT_BASED_ON) // this part is compiled only when the config ask for current
+#if defined(ADS_MEASURE) && defined(ADS_CURRENT_BASED_ON) // this part is compiled only when the config ask for current
 void OXS_ADS1115::ads_calculateCurrent(void) {
-    
+    static float floatConsumedMilliAmps = 0 ; // in mA
     static int32_t sumCurrent = 0 ;
     static uint16_t cnt ;
     static uint32_t milliTmp ;
@@ -205,14 +204,13 @@ void OXS_ADS1115::ads_calculateCurrent(void) {
     sumCurrent +=  ads_Conv[ads_CurrentIdx].value ;
     cnt++ ;
     milliTmp = millis() ;
-  if  (lastCurrentMillis == 0)  {
-    lastCurrentMillis = milliTmp ;
-  }
-  else if (  (milliTmp - lastCurrentMillis ) > 200 )  {   // calculate average only once per 200 millisec
+  if  ( (lastCurrentMillis > 0 ) &&  (  milliTmp > ( lastCurrentMillis + 200) ) ) {   // calculate average only once per 200 millisec
       adsCurrentData.milliAmps.value = ((sumCurrent / cnt) - MVOLT_AT_ZERO_AMP ) * 1000 / MVOLT_PER_AMP ;
 //      if (currentData.milliAmps.value < 0) currentData.milliAmps.value = 0 ;
       adsCurrentData.milliAmps.available = true ;
-      floatConsumedMilliAmps += ((float) adsCurrentData.milliAmps.value) * (milliTmp - lastCurrentMillis ) / 3600.0 /1000.0 ;   
+      sumCurrent = 0;
+      cnt = 0;
+      floatConsumedMilliAmps += ((float) adsCurrentData.milliAmps.value) * (milliTmp - lastCurrentMillis ) / 3600.0 /1000.0 ;   // Mike , is this ok when millis() overrun????
       adsCurrentData.consumedMilliAmps.value = (int32_t) floatConsumedMilliAmps ;
       adsCurrentData.consumedMilliAmps.available = true ;
       lastCurrentMillis =  milliTmp ;
@@ -226,8 +224,6 @@ void OXS_ADS1115::ads_calculateCurrent(void) {
       printer->print(" consumed milliAmph =  ");
       printer->println(adsCurrentData.consumedMilliAmps.value);
 #endif
-      sumCurrent = 0;
-      cnt = 0;
   } 
 }
 #endif
@@ -313,28 +309,25 @@ void OXS_ADS1115::ads_calculate_airspeed( int16_t ads_difPressureAdc ) {
 //                  adsAirSpeedData.airSpeed.value = 0 ;
 //              }    
               adsAirSpeedData.airSpeed.available = true ; 
-
 // check if offset must be reset
               if (adsAirSpeedData.airspeedReset) { // adjust the offset if a reset command is received from Tx
                     offset7002 =  offset7002  + ads_smoothDifPressureAdc ;
-                    ads_smoothDifPressureAdc = 0 ;
                     adsAirSpeedData.airspeedReset = false ; // avoid that offset is changed again and again if PPM do not send a command
               }
+
 #ifdef DEBUGADSAIRSPEEDDATA
                   static bool firstRawData = true ;
                   if ( firstRawData ) {
-                          printer->println(F("at,  difPressureAdc ,difPressADC_0 , ads_smoothDifPressureAdc , actualPressure , adsAirSpeedData.airSpeed, offset, reset  ")) ;
+                          printer->println(F("at,  difPressureAdc ,difPressADC_0 , ads_smoothDifPressureAdc , actualPressure , adsAirSpeedData.airSpeed ")) ;
                         firstRawData = false ;
                   } else {
                         printer->print( ads_airSpeedMillis ); printer->print(F(" , "));
                         printer->print( ads_difPressureAdc ); printer->print(F(" , "));
                         printer->print( ads_difPressureAdc_0); printer->print(F(" , "));
-                        printer->print( ads_smoothDifPressureAdc * 1000); printer->print(F(" , ")); 
+                        printer->print( ads_smoothDifPressureAdc ); printer->print(F(" , ")); 
                         printer->print( actualPressure ); printer->print(F(" , ")); 
                         printer->print( ads_smoothAirSpeed * 3.6 / 100 ); printer->print(F(" , "));
-                        printer->print( offset7002 * 1000); printer->print(F(" , ")); 
-                        if ( ads_smoothDifPressureAdc == 0) printer->print(F(" reset")) ;
-                        
+                         
                         printer->println(" ") ; 
                   }       
 #endif
@@ -346,6 +339,116 @@ void OXS_ADS1115::ads_calculate_airspeed( int16_t ads_difPressureAdc ) {
 }
 #endif // end of conditional compiling for calculate airspeed.
 
-#endif // end of #if defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined( ADS_MEASURE) 
+#endif // end of #ifdef ADS_MEASURE 
+
+/*
+                difPressureAdc =  ( ( (data[0] << 8) + data[1] ) & 0x3FFF) - 0x2000   ; // substract in order to have a zero value 
+               if ( calibrated4525 == false) {
+                   calibrateCount4525++ ;
+                   if (calibrateCount4525 == 256 ) { // after 256 reading , we can calculate the offset 
+                     offset4525 =  (  (float) difPressureSum / 128.0 ) ; //there has been 128 reading (256-128)                     
+                     calibrated4525 = true ;
+                   } else if  (calibrateCount4525 >= 128  ){ // after 128 reading, we can start cummulate the ADC values in order to calculate the offset 
+                      difPressureSum += difPressureAdc ;
+                   } // end calibration
+              }  else { // sensor is calibrated
+                    difPressureAdc_0 = difPressureAdc - offset4525 ;
+ // calculate a moving average on 4 values ( used only for vspeed compensation )                 
+                    difPressureAdcSum4Values += difPressureAdc - difPressureAdc4Values[countAverage] ;
+                    difPressureAdc4Values[countAverage] = difPressureAdc ;
+                    if( (++countAverage) >= 4 ) countAverage = 0 ;
+                    airSpeedData.difPressureAdc_zero = (float) difPressureAdcSum4Values * 0.25 - offset4525 ;  
 
 
+#define FILTERING4525_ADC_MIN        0.001   // 
+#define FILTERING4525_ADC_MAX        0.01 // 
+#define FILTERING4525_ADC_MIN_AT       10 // when abs(delta between ADC and current value) is less than MIN_AT , apply MIN  
+#define FILTERING4525_ADC_MAX_AT       100 // when abs(delta between ADC and current value) is more than MAX_AT , apply MAX (interpolation in between)
+                    abs_deltaDifPressureAdc =  abs(difPressureAdc_0 - smoothDifPressureAdc) ;
+                    if (abs_deltaDifPressureAdc <= FILTERING4525_ADC_MIN_AT) {
+                       expoSmooth4525_adc_auto = FILTERING4525_ADC_MIN ;  
+                    } else if (abs_deltaDifPressureAdc >= FILTERING4525_ADC_MAX_AT)  {
+                       expoSmooth4525_adc_auto = FILTERING4525_ADC_MAX ; 
+                    } else {
+                       expoSmooth4525_adc_auto = FILTERING4525_ADC_MIN + ( FILTERING4525_ADC_MAX - FILTERING4525_ADC_MIN) * (abs_deltaDifPressureAdc - FILTERING4525_ADC_MIN_AT) / (FILTERING4525_ADC_MAX_AT - FILTERING4525_ADC_MIN_AT) ;
+                    }
+                    smoothDifPressureAdc += expoSmooth4525_adc_auto * ( difPressureAdc_0 - smoothDifPressureAdc ) ; // 
+              }  
+               // calculate airspeed based on pressure, altitude and temperature
+               // airspeed (m/sec) = sqr(2 * differential_pressure_in_Pa / air_mass_kg_per_m3) 
+               // air_mass_kg_per_m3 = pressure_in_pa / (287.05 * (Temp celcius + 273.15))
+               // and differantial_pressure_Pa =  ((smoothDifPressureAdc  ) * 1.052) ;  // with MS4525DO_001 a range of 2 PSI gives 80% of 16383 (= max of 14bits); 1 PSI = 6894,76 Pascal ; so 1 unit of ADC = 2/ (80% * 16383) * 6894,76) 
+               // so airspeed m/sec =sqr( 2 * 287.05 * 1.052 * smoothDifPressureAdc * (temperature Celsius + 273.15) / pressure_in_pa )
+               // rawAirSpeed cm/sec =  24,58 * 100 * sqrt( (float) abs(smoothDifPressureAdc) * temperature4525  /  actualPressure) ); // in cm/sec ; actual pressure must be in pa (so 101325 about at sea level)
+#ifdef AIRSPEED_AT_SEA_LEVEL_AND_15C
+               airSpeedData.smoothAirSpeed =  131.06 * sqrt( (float) ( abs(smoothDifPressureAdc) ) ); // indicated airspeed is calculated at 15 Celsius and 101325 pascal
+#else               
+               airSpeedData.smoothAirSpeed =  2458 * sqrt( (float) ( abs(smoothDifPressureAdc) * airSpeedData.temperature4525  /  actualPressure) ); // in cm/sec ; actual pressure must be in pa (so 101325 about at sea level)
+#endif              
+             if ( smoothDifPressureAdc < 0 ) airSpeedData.smoothAirSpeed = - airSpeedData.smoothAirSpeed ; // apply the sign
+              
+#ifdef DEBUG4525RAWDATA  
+                  static bool firstRawData = true ;
+                  if ( firstRawData ) {
+                          printer->println(F("at,  difPressureAdc ,difPressADC_0 , countAverage , difPressureAdcSum4Values ,airSpeedData.difPressureAdc_zero , expoSmooth4525_adc_auto ,smoothDifPressureAdc ,  smoothAirSpeed, ")) ;
+                        firstRawData = false ;
+                  } else {
+                        printer->print( airSpeedMicros); printer->print(F(" , "));
+                        printer->print(  difPressureAdc); printer->print(F(" , "));
+                        printer->print( difPressureAdc_0); printer->print(F(" , "));
+                        printer->print( countAverage); printer->print(F(" , ")); 
+                        printer->print( difPressureAdcSum4Values); printer->print(F(" , "));
+                        printer->print( airSpeedData.difPressureAdc_zero); printer->print(F(" , "));
+                        printer->print( expoSmooth4525_adc_auto * 1000); printer->print(F(" , "));
+                        printer->print( airSpeedData.smoothDifPressureAdc); printer->print(F(" , "));
+                         printer->print( airSpeedData.smoothAirSpeed * 3.6 / 100); printer->print(F(" , "));
+                         
+                        printer->println(" ") ; 
+                  }       
+#endif
+              
+           } // en if data[0] is valid
+        } // end no error on I2C    
+        airSpeedMillis = millis() ;
+#ifdef DEBUG4525READINOUTDELAY
+         airSpeedMicrosDebugMid2 = micros() ;
+#endif
+
+        if (airSpeedMillis > nextAirSpeedMillis){ // publish airspeed only once every xx ms
+              nextAirSpeedMillis = airSpeedMillis + 200 ;
+              if ( airSpeedData.smoothAirSpeed >  0) {  // normally send only if positive and greater than 300 cm/sec , otherwise send 0 but for test we keep all values to check for drift  
+#ifdef AIRSPEED_IN_KMH  // uncomment this line if AIR speed has to be in knot instead of km/h
+                  airSpeedData.airSpeed.value = airSpeedData.smoothAirSpeed * 0.36 ; // from cm/sec to 1/10 km/h
+#else
+                  airSpeedData.airSpeed.value = airSpeedData.smoothAirSpeed * 0.1943844492 ; // from cm/sec to 1/10 knot/h
+#endif
+              } else {
+                  airSpeedData.airSpeed.value = 0 ;
+              }    
+              airSpeedData.airSpeed.available = true ; 
+// check if offset must be reset
+              if (airSpeedData.airspeedReset) { // adjust the offset if a reset command is received from Tx
+                    offset4525 =  offset4525  + smoothDifPressureAdc ;
+                    airSpeedData.airspeedReset = false ; // avoid that offset is changed again and again if PPM do not send a command
+              }
+ 
+
+       }  // end of process every xx millis
+
+#ifdef DEBUG4525READINOUTDELAY
+         airSpeedMicrosDebugMid3 = micros() ;
+         printer->print(F("at= "));
+         printer->print(airSpeedMicrosDebug) ;
+         printer->print(F(" delay in out Mid= "));
+         airSpeedMicrosDebugMid1 =  airSpeedMicrosDebugMid1 - airSpeedMicrosDebug ;
+         printer->print(airSpeedMicrosDebugMid1) ;
+         printer->print(F(" delay in out 100ms= "));
+         airSpeedMicrosDebugMid2 =  airSpeedMicrosDebugMid2 - airSpeedMicrosDebug ;
+         printer->print(airSpeedMicrosDebugMid2) ;
+         printer->print(F(" tot= "));
+         airSpeedMicrosDebugMid3 = airSpeedMicrosDebugMid3 - airSpeedMicrosDebug ;
+         printer->print(airSpeedMicrosDebugMid3) ;
+          printer->println(F(" "));
+#endif
+
+*/

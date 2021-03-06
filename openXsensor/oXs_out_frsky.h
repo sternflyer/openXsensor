@@ -20,18 +20,20 @@
 #define INTERVAL_FRAME1 200
 #define INTERVAL_FRAME2 1000  // used by GPS
 
-// default SPORT_SENSOR_ID
-//#define DATA_ID_VARIO  0x00  // = sensor 0 used for Alt and Vspeed
-//#define DATA_ID_FLVSS  0xA1  //          1
-//#define DATA_ID_FAS    0x22  //          2
-//#define DATA_ID_GPS    0x83  //          3 used for all GPS data
-//#define DATA_ID_RPM    0xE4  //          4
-//#define DATA_ID_ACC    0x67  //          7
+#define DATA_ID_VARIO  0x00  // = sensor 0
+#define DATA_ID_FLVSS  0xA1  //          1
+#define DATA_ID_FAS    0x22  //          2
+#define DATA_ID_GPS    0x83  //          3
+#define DATA_ID_RPM    0xE4  //          4
+#define DATA_ID_ACC    0x67  //          7
+//       #define DATA_ID_SP2UH  0x45  5
+//       #define DATA_ID_SP2UR  0xC6  6
+
 //list of 28 device ID codes is (in sequence)
 // 0x00,0xA1,0x22,0x83,0xE4,0x45,0xC6,0x67,0x48,0xE9,0x6A,0xCB,0xAC,0x0D,0x8E,0x2F,0xD0,0x71,0xF2,0x53,0x34,0x95,0x16,0xB7,0x98,0x39,0xBA,0x1B
 
 
-// FrSky new DATA IDs (2 bytes) (copied from openTX telemetry/frsky_sport.cpp on 11 jul 2014) // those values are not used directly but bits 4 up to 11 are stored in an array in oXs_out_frsky.cpp 
+// FrSky new DATA IDs (2 bytes) (copied from openTX telemetry/frsky_sport.cpp on 11 jul 2014)
 #define ALT_FIRST_ID            0x0100
 #define ALT_LAST_ID             0x010f
 #define VARIO_FIRST_ID          0x0110
@@ -54,7 +56,7 @@
 #define FUEL_LAST_ID            0x060f
 #define ACCX_FIRST_ID           0x0700
 #define ACCX_LAST_ID            0x070f
-#define ACCY_FIRST_ID           0x0710      
+#define ACCY_FIRST_ID           0x0710
 #define ACCY_LAST_ID            0x071f
 #define ACCZ_FIRST_ID           0x0720
 #define ACCZ_LAST_ID            0x072f

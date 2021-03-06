@@ -1,9 +1,7 @@
 #include "oXs_bmp280.h"
 
-#if defined(SENSOR_IS_BMP280) 
-
 #ifdef DEBUG
-//#define DEBUGI2CBMP280
+//#define DEBUGI2CMS5611
 //#define DEBUGDATA
 //#define DEBUGVARIOI2C
 #endif
@@ -24,7 +22,7 @@ OXS_BMP280::OXS_BMP280(void)
 {
   // constructor
   //_addr=addr;
-#define I2C_BMP280_ADR 0x76 ; 
+//#define I2C_BMP280_ADR 0x76 ; 
   _addr = I2C_BMP280_ADR ;
   varioData.SensorState = 0 ;
 #ifdef DEBUG  
@@ -50,9 +48,9 @@ void OXS_BMP280::setup() {
 //  nextAverageAltMillis =  nextAltMillis ;  // in msec ; save when AverageAltitude has to be calculated
 //  nextAverageAltMillis =  nextAltMillis ; 
 
-//#ifdef ALT_TEMP_COMPENSATION
-//  alt_temp_compensation = ALT_TEMP_COMPENSATION ;
-//#endif
+#ifdef ALT_TEMP_COMPENSATION
+  alt_temp_compensation = ALT_TEMP_COMPENSATION ;
+#endif
 
   
 #ifdef DEBUG
@@ -128,9 +126,9 @@ void OXS_BMP280::setup() {
 //***                            read the sensor                                           ***
 //********************************************************************************************
 bool OXS_BMP280::readSensor() {
-    //static uint32_t lastBMP280ReadMicro ;
+    static uint32_t lastBMP280ReadMicro ;
     bool newVSpeedCalculated  = false ; 
-    if ( ( micros() - varioData.lastCommandMicros ) > 20000)  { 
+    if ( micros() > (  lastBMP280ReadMicro + 20000) ) { 
           int32_t adc_T = 0 ;
           int32_t adc_P = 0 ;
           int32_t t_fine; // t_fine carries fine temperature as global value
@@ -152,7 +150,7 @@ bool OXS_BMP280::readSensor() {
           adc_T <<= 8 ;
           adc_T |= I2c.receive()  ;
           adc_T = adc_T >> 4 ;
-          varioData.lastCommandMicros = micros() ;
+          lastBMP280ReadMicro = micros() ;
           
           var1 = ((((adc_T>>3) - ((int32_t)_bmp280_coeffs.dig_T1<<1))) * ((int32_t)_bmp280_coeffs.dig_T2)) >> 11;
           var2 = (((((adc_T>>4) - ((int32_t)_bmp280_coeffs.dig_T1)) * ((adc_T>>4) - ((int32_t)_bmp280_coeffs.dig_T1))) >> 12) * ((int32_t)_bmp280_coeffs.dig_T3)) >> 14;
@@ -309,7 +307,6 @@ void OXS_BMP280::calculateVario() {
       pressureMicrosPrev2 = pressureMicrosPrev1 ;
 } // End of calculate Vario
 
-#endif // end of #if defined(SENSOR_IS_BMP280) 
 
 
 

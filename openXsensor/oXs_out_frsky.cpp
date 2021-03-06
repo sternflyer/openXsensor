@@ -6,7 +6,6 @@
 #ifdef DEBUG
 // ************************* Several parameters to help debugging
 //#define DEBUG_LOAD_SPORT
-//#define DEBUG_STATE 
 //#define DEBUG_SPORT_RECEIVED
 //#define DEBUGSENDDATA
 //#define DEBUGSENDSENSITIVITY
@@ -40,29 +39,19 @@ extern OXS_VOLTAGE oXs_Voltage ;
 extern OXS_CURRENT oXs_Current ;
 extern OXS_4525 oXs_4525 ;
 
-#if  defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && defined(ADS_CURRENT_BASED_ON)
-extern  CURRENTDATA adsCurrentData ;
-#endif
-
 extern unsigned long micros( void ) ;
 extern unsigned long millis( void ) ;
 extern void delay(unsigned long ms) ;
 
 //used only by Sport protocol
 extern uint8_t  volatile  sportData[7] ;
-uint8_t  volatile TxData[8] ;
-uint8_t  volatile TxDataIdx ;
-uint8_t rxStuff ;
-extern uint8_t LastRx ;
-static volatile uint8_t prevLastRx ;           // just for testing
-
 uint8_t volatile sportDataLock ;
 extern uint8_t volatile sendStatus ;
 #if defined(VFAS_SOURCE) 
   struct ONE_MEASUREMENT vfas ; 
 #endif
 
-#if ( defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES) ) || ( defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && defined(ADS_CURRENT_BASED_ON)) 
+#if defined(PIN_CURRENTSENSOR) 
     struct ONE_MEASUREMENT sport_currentData ;
 #endif
 
@@ -74,6 +63,8 @@ extern uint8_t volatile sendStatus ;
     struct ONE_MEASUREMENT sport_gps_course;
     extern bool GPS_fix ;
 #endif
+
+
 
 extern struct ONE_MEASUREMENT sport_rpm ;
 
@@ -96,7 +87,7 @@ extern volatile uint8_t state ;                  //!< Holds the state of the UAR
 
 
 #ifdef DEBUG_SPORT_RECEIVED
-  volatile uint16_t sportRcvCount ;
+  volatile uint8_t sportRcvCount ;
 #endif
 
 
@@ -128,7 +119,7 @@ void OXS_OUT::setup() {
     initHubUart( ) ;
     sportAvailable = false ;    // force the HUB protocol
 #else                           // we will detect automatically if SPORT is available     
-                                      // Activate pin change interupt 2 on Tx pin
+                                      // Activate pin change interupt on Tx pin
 #if PIN_SERIALTX == 4
     PCMSK2 |= 0x10 ;			            // IO4 (PD4) on Arduini mini
 #elif PIN_SERIALTX == 2
@@ -188,13 +179,12 @@ void OXS_OUT::sendData() {
 
 #if defined( PROTOCOL ) &&  ( ( PROTOCOL == FRSKY_SPORT ) || ( PROTOCOL == FRSKY_SPORT_HUB ) )
 
-volatile uint8_t idToReply ;                                                     // each bit (0..5) reports (set to 1) if oXs has to reply to a pooling on a specific Id (this has been added because oXs has to reply with all 0x00 when he has not yet data available 
 volatile uint8_t frskyStatus = 0x3F  ;                                                   //Status of SPORT protocol saying if data is to load in work field (bit 0...5 are used for the 6 sensorId), initially all data are to be loaded
 uint8_t currFieldIdx[6] = { 0 , 2, 5 , 10 , 15 , 19 } ;                          // per sensor, say which field has been loaded the last time (so next time, we have to search from the next one)
 const uint8_t fieldMinIdx[7]  = { 0 , 2, 5 , 10 , 15 , 19 , 22 } ;                     // per sensor, say the first field index ; there is one entry more in the array to know the last index
 const uint8_t fieldId[22] = { 0x10 , 0x11 , 0x30 , 0x30 , 0x30 , 0x21 , 0x20 , 0x60 ,0x90, 0x91 , 0x80, 0x80 , 0x82 , 0x83 , 0x84 , 0x50 , 0x40 , 0x41 , 0xA0 , 0x70 , 0x71 , 0x72 } ; //fieldID to send to Tx (to shift 4 bits to left
 struct ONE_MEASUREMENT * p_measurements[22] ;      // array of 22 pointers (each pointer point to a structure containing a byte saying if a value is available and to the value.
-// There are 20 possible fields to transmit in SPORT                                                                                                                            
+// There are 20 possible fields to transmit in SPORT
 // They are grouped per sensor ID
 // Sensor 0 start from index = 0 and contains Alt + Vspeed
 // Sensor 1 start from index = 2 and contains Cell_1_2 , Cell_3_4 and Cell_5_6
@@ -214,7 +204,6 @@ void initMeasurement() {
 // pointer to Altitude
 #if defined(VARIO) 
     p_measurements[0] = &oXs_MS5611.varioData.relativeAlt ; // we use always relative altitude in Frsky protocol
-    idToReply |= 0x01 ;
 #else
    p_measurements[0] = &no_data ;
 #endif
@@ -227,74 +216,64 @@ void initMeasurement() {
 #endif
 
 // pointer to Cell_1_2
-#if defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) && defined(NUMBEROFCELLS) && (NUMBEROFCELLS > 0)      
+#if defined(PIN_VOLTAGE) && defined(NUMBEROFCELLS) && (NUMBEROFCELLS > 0)      
    p_measurements[2] = &oXs_Voltage.voltageData.mVoltCell_1_2 ; 
-   idToReply |= 0x02 ;
 #else
     p_measurements[2] = &no_data ;
 #endif
 
 // pointer to Cell_3_4
-#if defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) && defined(NUMBEROFCELLS) && (NUMBEROFCELLS > 2)      
+#if defined(PIN_VOLTAGE) && defined(NUMBEROFCELLS) && (NUMBEROFCELLS > 2)      
    p_measurements[3] = &oXs_Voltage.voltageData.mVoltCell_3_4 ; 
 #else
     p_measurements[3] = &no_data ;
 #endif
 
 // pointer to Cell_5_6
-#if defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) && defined(NUMBEROFCELLS) && (NUMBEROFCELLS > 4)      
+#if defined(PIN_VOLTAGE) && defined(NUMBEROFCELLS) && (NUMBEROFCELLS > 4)      
    p_measurements[4] = &oXs_Voltage.voltageData.mVoltCell_5_6 ; 
 #else
     p_measurements[4] = &no_data ;
 #endif
 // pointer to vfas
-#if defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) && defined(VFAS_SOURCE) && ( VFAS_SOURCE == VOLT_1 || VFAS_SOURCE == VOLT_2 || VFAS_SOURCE == VOLT_3 || VFAS_SOURCE == VOLT_4 || VFAS_SOURCE == VOLT_5 || VFAS_SOURCE == VOLT_6 )
+#if defined(PIN_VOLTAGE) && defined(VFAS_SOURCE) && ( VFAS_SOURCE == VOLT_1 || VFAS_SOURCE == VOLT_2 || VFAS_SOURCE == VOLT_3 || VFAS_SOURCE == VOLT_4 || VFAS_SOURCE == VOLT_5 || VFAS_SOURCE == VOLT_6 )
     p_measurements[5] = &vfas ;
-    idToReply |= 0x04 ;
-#elif defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && defined(VFAS_SOURCE) && ( VFAS_SOURCE == ADS_VOLT_1 || VFAS_SOURCE == ADS_VOLT_2 || VFAS_SOURCE == ADS_VOLT_3 || VFAS_SOURCE == ADS_VOLT_4 )
+#elif defined(ADS_MEASURE) && defined(VFAS_SOURCE) && ( VFAS_SOURCE == ADS_VOLT_1 || VFAS_SOURCE == ADS_VOLT_2 || VFAS_SOURCE == ADS_VOLT_3 || VFAS_SOURCE == ADS_VOLT_4 )
     p_measurements[5] = &vfas ;
-    idToReply |= 0x04 ;
 #else
     p_measurements[5] = &no_data ;
 #endif
    
 // pointer to current
-#if ( defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES) ) || ( defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && defined(ADS_CURRENT_BASED_ON)) 
+#if defined(PIN_CURRENTSENSOR) 
     p_measurements[6] = &sport_currentData ;
-    idToReply |= 0x04 ;
 #else
     p_measurements[6] = &no_data ;
 #endif
 
 // pointer to fuel                                    
-#if defined(FUEL_SOURCE) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES)&& ( FUEL_SOURCE == VOLT_1 || FUEL_SOURCE == VOLT_2 || FUEL_SOURCE == VOLT_3 || FUEL_SOURCE == VOLT_4 || FUEL_SOURCE == VOLT_5 || FUEL_SOURCE == VOLT_6 )
+#if defined(FUEL_SOURCE) && defined(PIN_VOLTAGE) && ( FUEL_SOURCE == VOLT_1 || FUEL_SOURCE == VOLT_2 || FUEL_SOURCE == VOLT_3 || FUEL_SOURCE == VOLT_4 || FUEL_SOURCE == VOLT_5 || FUEL_SOURCE == VOLT_6 )
     p_measurements[7] =  &oXs_Voltage.voltageData.mVolt[FUEL_SOURCE - VOLT_1];
-    idToReply |= 0x04 ;
-#elif defined(FUEL_SOURCE) && defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && ( FUEL_SOURCE == ADS_VOLT_1 || FUEL_SOURCE == ADS_VOLT_2 || FUEL_SOURCE == ADS_VOLT_3 || FUEL_SOURCE == ADS_VOLT_4 )
-    p_measurements[7] =  &ads_Conv[FUEL_SOURCE - ADS_VOLT_1];
-    idToReply |= 0x04 ; 
+#elif defined(FUEL_SOURCE) && defined(ADS_MEASURE) && ( FUEL_SOURCE == ADS_VOLT_1 || FUEL_SOURCE == ADS_VOLT_2 || FUEL_SOURCE == ADS_VOLT_3 || FUEL_SOURCE == ADS_VOLT_4 )
+    p_measurements[7] =  &ads_Conv[FUEL_SOURCE - ADS_VOLT_1]; 
 #else
     p_measurements[7] = &no_data ;
 #endif
 
 // pointer to A3                                    
-#if defined(A3_SOURCE) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) && ( A3_SOURCE == VOLT_1 || A3_SOURCE == VOLT_2 || A3_SOURCE == VOLT_3 || A3_SOURCE == VOLT_4 || A3_SOURCE == VOLT_5 || A3_SOURCE == VOLT_6 )
+#if defined(A3_SOURCE) && defined(PIN_VOLTAGE) && ( A3_SOURCE == VOLT_1 || A3_SOURCE == VOLT_2 || A3_SOURCE == VOLT_3 || A3_SOURCE == VOLT_4 || A3_SOURCE == VOLT_5 || A3_SOURCE == VOLT_6 )
     p_measurements[8] =  &oXs_Voltage.voltageData.mVolt[A3_SOURCE - VOLT_1];
-    idToReply |= 0x04 ;
-#elif defined(A3_SOURCE) && defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && ( A3_SOURCE == ADS_VOLT_1 || A3_SOURCE == ADS_VOLT_2 || A3_SOURCE == ADS_VOLT_3 || A3_SOURCE == ADS_VOLT_4 )
+#elif defined(A3_SOURCE) && defined(ADS_MEASURE) && ( A3_SOURCE == ADS_VOLT_1 || A3_SOURCE == ADS_VOLT_2 || A3_SOURCE == ADS_VOLT_3 || A3_SOURCE == ADS_VOLT_4 )
     p_measurements[8] =  &ads_Conv[A3_SOURCE - ADS_VOLT_1];
-    idToReply |= 0x04 ;
 #else
     p_measurements[8] = &no_data ;
 #endif
 
 // pointer to A4                                    
-#if defined(A4_SOURCE) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) && ( A4_SOURCE == VOLT_1 || A4_SOURCE == VOLT_2 || A4_SOURCE == VOLT_3 || A4_SOURCE == VOLT_4 || A4_SOURCE == VOLT_5 || A4_SOURCE == VOLT_6 )
+#if defined(A4_SOURCE) && defined(PIN_VOLTAGE) && ( A4_SOURCE == VOLT_1 || A4_SOURCE == VOLT_2 || A4_SOURCE == VOLT_3 || A4_SOURCE == VOLT_4 || A4_SOURCE == VOLT_5 || A4_SOURCE == VOLT_6 )
     p_measurements[9] =  &oXs_Voltage.voltageData.mVolt[A4_SOURCE - VOLT_1];
-    idToReply |= 0x04 ;
-#elif defined(A4_SOURCE) && defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && ( A4_SOURCE == ADS_VOLT_1 || A4_SOURCE == ADS_VOLT_2 || A4_SOURCE == ADS_VOLT_3 || A4_SOURCE == ADS_VOLT_4 )
+#elif defined(A4_SOURCE) && defined(ADS_MEASURE) && ( A4_SOURCE == ADS_VOLT_1 || A4_SOURCE == ADS_VOLT_2 || A4_SOURCE == ADS_VOLT_3 || A4_SOURCE == ADS_VOLT_4 )
     p_measurements[9] =  &ads_Conv[A4_SOURCE - ADS_VOLT_1];
-    idToReply |= 0x04 ;
 #else
     p_measurements[9] = &no_data ;
 #endif
@@ -302,8 +281,7 @@ void initMeasurement() {
 
 // pointer to GPS lon
 #if defined(GPS_INSTALLED)
-  p_measurements[10] = &sport_gps_lon ;
-  idToReply |= 0x08 ; 
+  p_measurements[10] = &sport_gps_lon ; 
 #else
   p_measurements[10] = &no_data ; 
 #endif
@@ -339,77 +317,56 @@ void initMeasurement() {
 // pointer to RPM
 #if defined(MEASURE_RPM) 
   p_measurements[15] = &sport_rpm ; 
-  idToReply |= 0x10 ;
 #else
   p_measurements[15] = &no_data ; 
 #endif
 
 // pointer to T1
 #if defined(T1_SOURCE) && ( T1_SOURCE == TEST_1)
-   p_measurements[16] = &test1 ;
-   idToReply |= 0x10 ; 
+   p_measurements[16] = &test1 ; 
 #elif defined(T1_SOURCE) && ( T1_SOURCE == TEST_2)
    p_measurements[16] = &test2 ; 
-   idToReply |= 0x10 ;
 #elif defined(T1_SOURCE) && ( T1_SOURCE == TEST_3)
    p_measurements[16] = &test3 ; 
-   idToReply |= 0x10 ;
 #elif defined(T1_SOURCE) && ( T1_SOURCE == GLIDER_RATIO) && defined(GLIDER_RATIO_CALCULATED_AFTER_X_SEC)
    p_measurements[16] = &gliderRatio ; 
-   idToReply |= 0x10 ;
 #elif defined(T1_SOURCE) && ( T1_SOURCE == SECONDS_SINCE_T0 ) && defined(VARIO) && defined(GLIDER_RATIO_CALCULATED_AFTER_X_SEC)
-   p_measurements[16] = &secFromT0 ;
-   idToReply |= 0x10 ; 
+   p_measurements[16] = &secFromT0 ; 
 #elif defined(T1_SOURCE) && ( T1_SOURCE == AVERAGE_VSPEED_SINCE_TO ) && defined(VARIO) && defined(GLIDER_RATIO_CALCULATED_AFTER_X_SEC)
-   p_measurements[16] = &averageVspeedSinceT0 ;
-   idToReply |= 0x10 ; 
+   p_measurements[16] = &averageVspeedSinceT0 ; 
 #elif defined(T1_SOURCE) && ( T1_SOURCE == SENSITIVITY) && defined(VARIO)
    p_measurements[16] = &oXs_MS5611.varioData.sensitivity ; 
-   idToReply |= 0x10 ;
-#elif defined(T1_SOURCE) && ( T1_SOURCE == PPM) && ( defined(PIN_PPM) || ( defined(PPM_VIA_SPORT) && ( (PROTOCOL  == FRSKY_SPORT) || (PROTOCOL == FRSKY_SPORT_HUB) ) ) )
+#elif defined(T1_SOURCE) && ( T1_SOURCE == PPM) && defined(PIN_PPM)
    p_measurements[16] = &ppm ; 
-   idToReply |= 0x10 ;
-#elif defined(T1_SOURCE) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) && ( T1_SOURCE == VOLT_1 || T1_SOURCE == VOLT_2 || T1_SOURCE == VOLT_3 || T1_SOURCE == VOLT_4 || T1_SOURCE == VOLT_5 || T1_SOURCE == VOLT_6 )
+#elif defined(T1_SOURCE) && defined(PIN_VOLTAGE) && ( T1_SOURCE == VOLT_1 || T1_SOURCE == VOLT_2 || T1_SOURCE == VOLT_3 || T1_SOURCE == VOLT_4 || T1_SOURCE == VOLT_5 || T1_SOURCE == VOLT_6 )
    p_measurements[16] = &oXs_Voltage.voltageData.mVolt[T1_SOURCE - VOLT_1] ;
-   idToReply |= 0x10 ;
-#elif defined(T1_SOURCE) && defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && ( T1_SOURCE == ADS_VOLT_1 || T1_SOURCE == ADS_VOLT_2 || T1_SOURCE == ADS_VOLT_3 || T1_SOURCE == ADS_VOLT_4 )
+#elif defined(T1_SOURCE) && defined(ADS_MEASURE) && ( T1_SOURCE == ADS_VOLT_1 || T1_SOURCE == ADS_VOLT_2 || T1_SOURCE == ADS_VOLT_3 || T1_SOURCE == ADS_VOLT_4 )
     p_measurements[16] =  &ads_Conv[T1_SOURCE - ADS_VOLT_1];
-    idToReply |= 0x10 ;
 #else
    p_measurements[16] = &no_data ; // T1 
 #endif
 
 // pointer to T2   
 #if defined(T2_SOURCE) && ( T2_SOURCE == TEST_1)
-   p_measurements[17] = &test1 ;
-   idToReply |= 0x10 ; 
+   p_measurements[17] = &test1 ; 
 #elif defined(T2_SOURCE) && ( T2_SOURCE == TEST_2)
    p_measurements[17] = &test2 ; 
-   idToReply |= 0x10 ;
 #elif defined(T2_SOURCE) && ( T2_SOURCE == TEST_3)
    p_measurements[17] = &test3 ; 
-   idToReply |= 0x10 ;
 #elif defined(T2_SOURCE) && ( T2_SOURCE == GLIDER_RATIO) && defined(GLIDER_RATIO_CALCULATED_AFTER_X_SEC)
    p_measurements[17] = &gliderRatio ; 
-   idToReply |= 0x10 ;
 #elif defined(T2_SOURCE) && ( T2_SOURCE == SECONDS_SINCE_T0 ) && defined(VARIO) && defined(GLIDER_RATIO_CALCULATED_AFTER_X_SEC)
    p_measurements[17] = &secFromT0 ; 
-   idToReply |= 0x10 ;
 #elif defined(T2_SOURCE) && ( T2_SOURCE == AVERAGE_VSPEED_SINCE_TO ) && defined(VARIO) && defined(GLIDER_RATIO_CALCULATED_AFTER_X_SEC)
    p_measurements[17] = &averageVspeedSinceT0 ; 
-   idToReply |= 0x10 ;
 #elif defined(T2_SOURCE) && ( T2_SOURCE == SENSITIVITY) && defined(VARIO) 
    p_measurements[17] = &oXs_MS5611.varioData.sensitivity ; 
-   idToReply |= 0x10 ;
-#elif defined(T2_SOURCE) && ( T2_SOURCE == PPM) && ( defined(PIN_PPM) || ( defined(PPM_VIA_SPORT) && ( (PROTOCOL  == FRSKY_SPORT) || (PROTOCOL == FRSKY_SPORT_HUB) ) ) )
+#elif defined(T2_SOURCE) && ( T2_SOURCE == PPM) && defined(PIN_PPM)
    p_measurements[17] = &ppm ; 
-   idToReply |= 0x10 ;
-#elif defined(T2_SOURCE) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) && ( T2_SOURCE == VOLT_1 || T2_SOURCE == VOLT_2 || T2_SOURCE == VOLT_3 || T2_SOURCE == VOLT_4 || T2_SOURCE == VOLT_5 || T2_SOURCE == VOLT_6 )
+#elif defined(T2_SOURCE) && defined(PIN_VOLTAGE) && ( T2_SOURCE == VOLT_1 || T2_SOURCE == VOLT_2 || T2_SOURCE == VOLT_3 || T2_SOURCE == VOLT_4 || T2_SOURCE == VOLT_5 || T2_SOURCE == VOLT_6 )
    p_measurements[17] = &oXs_Voltage.voltageData.mVolt[T2_SOURCE - VOLT_1] ;
-   idToReply |= 0x10 ;
-#elif defined(T2_SOURCE) && defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && ( T2_SOURCE == ADS_VOLT_1 || T2_SOURCE == ADS_VOLT_2 || T2_SOURCE == ADS_VOLT_3 || T2_SOURCE == ADS_VOLT_4 )
+#elif defined(T2_SOURCE) && defined(ADS_MEASURE) && ( T2_SOURCE == ADS_VOLT_1 || T2_SOURCE == ADS_VOLT_2 || T2_SOURCE == ADS_VOLT_3 || T2_SOURCE == ADS_VOLT_4 )
     p_measurements[17] =  &ads_Conv[T2_SOURCE - ADS_VOLT_1];
-    idToReply |= 0x10 ;
 #else
    p_measurements[17] = &no_data ; // T2 
 #endif
@@ -419,10 +376,8 @@ void initMeasurement() {
 // pointer to airspeed
 #if defined(AIRSPEED) 
   p_measurements[18] = &oXs_4525.airSpeedData.airSpeed ;
-  idToReply |= 0x10 ;
-#elif defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && defined(ADS_AIRSPEED_BASED_ON)
+#elif defined(ADS_MEASURE) && defined(ADS_AIRSPEED_BASED_ON)
   p_measurements[18] = &oXs_ads1115.adsAirSpeedData.airSpeed ;
-  idToReply |= 0x10 ;
 #else
   p_measurements[18] = &no_data ; 
 #endif
@@ -430,37 +385,26 @@ void initMeasurement() {
 // pointer to accX
 #if defined(ACCX_SOURCE) && ( ACCX_SOURCE == TEST_1)
    p_measurements[19] = &test1 ; // accX
-   idToReply |= 0x20 ;
 #elif defined(ACCX_SOURCE) && ( ACCX_SOURCE == TEST_2)
    p_measurements[19] = &test2 ; // accX
-   idToReply |= 0x20 ;
 #elif defined(ACCX_SOURCE) && ( ACCX_SOURCE == TEST_3)
    p_measurements[19] = &test3 ; // accX
-   idToReply |= 0x20 ;
 #elif defined(ACCX_SOURCE) && ( ACCX_SOURCE == GLIDER_RATIO) && defined(GLIDER_RATIO_CALCULATED_AFTER_X_SEC)
    p_measurements[19] = &gliderRatio ; 
-   idToReply |= 0x20 ;
 #elif defined(ACCX_SOURCE) && ( ACCX_SOURCE == SECONDS_SINCE_T0 ) && defined(VARIO) && defined(GLIDER_RATIO_CALCULATED_AFTER_X_SEC)
    p_measurements[19] = &secFromT0 ; 
-   idToReply |= 0x20 ;
 #elif defined(ACCX_SOURCE) && ( ACCX_SOURCE == AVERAGE_VSPEED_SINCE_TO ) && defined(VARIO) && defined(GLIDER_RATIO_CALCULATED_AFTER_X_SEC)
    p_measurements[19] = &averageVspeedSinceT0 ; 
-   idToReply |= 0x20 ;
-#elif defined(ACCX_SOURCE) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) && ( ACCX_SOURCE == VOLT_1 || ACCX_SOURCE == VOLT_2 || ACCX_SOURCE == VOLT_3 || ACCX_SOURCE == VOLT_4 || ACCX_SOURCE == VOLT_5 || ACCX_SOURCE == VOLT_6 )
+#elif defined(ACCX_SOURCE) && defined(PIN_VOLTAGE) && ( ACCX_SOURCE == VOLT_1 || ACCX_SOURCE == VOLT_2 || ACCX_SOURCE == VOLT_3 || ACCX_SOURCE == VOLT_4 || ACCX_SOURCE == VOLT_5 || ACCX_SOURCE == VOLT_6 )
    p_measurements[19] = &oXs_Voltage.voltageData.mVolt[ACCX_SOURCE - VOLT_1] ;
-   idToReply |= 0x20 ;
-#elif defined(ACCX_SOURCE) && defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && ( ACCX_SOURCE == ADS_VOLT_1 || ACCX_SOURCE == ADS_VOLT_2 || ACCX_SOURCE == ADS_VOLT_3 || ACCX_SOURCE == ADS_VOLT_4 )
+#elif defined(ACCX_SOURCE) && defined(ADS_MEASURE) && ( ACCX_SOURCE == ADS_VOLT_1 || ACCX_SOURCE == ADS_VOLT_2 || ACCX_SOURCE == ADS_VOLT_3 || ACCX_SOURCE == ADS_VOLT_4 )
     p_measurements[19] =  &ads_Conv[ACCX_SOURCE - ADS_VOLT_1];
-    idToReply |= 0x20 ;
 #elif defined(ACCX_SOURCE) && ( ACCX_SOURCE == PITCH) && defined(USE_6050)
    p_measurements[19] = &pitch ; // accX
-   idToReply |= 0x20 ;
 #elif defined(ACCX_SOURCE) && ( ACCX_SOURCE == ROLL) && defined(USE_6050)
    p_measurements[19] = &roll ; // accX
-   idToReply |= 0x20 ;
 #elif defined(ACCX_SOURCE) && ( ACCX_SOURCE == YAW) && defined(USE_6050)
    p_measurements[19] = &yaw ; // accX
-   idToReply |= 0x20 ;
 #else
    p_measurements[19] = &no_data ; // accX
 #endif
@@ -468,37 +412,26 @@ void initMeasurement() {
 // pointer to accY
 #if defined(ACCY_SOURCE) && ( ACCY_SOURCE == TEST_1)
    p_measurements[20] = &test1 ; // accY
-   idToReply |= 0x20 ;
 #elif defined(ACCY_SOURCE) && ( ACCY_SOURCE == TEST_2)
    p_measurements[20] = &test2 ; // accY
-   idToReply |= 0x20 ;
 #elif defined(ACCY_SOURCE) && ( ACCY_SOURCE == TEST_3)
    p_measurements[20] = &test3 ; // accY
-   idToReply |= 0x20 ;
 #elif defined(ACCY_SOURCE) && ( ACCY_SOURCE == GLIDER_RATIO) && defined(GLIDER_RATIO_CALCULATED_AFTER_X_SEC)
    p_measurements[20] = &gliderRatio ; 
-   idToReply |= 0x20 ;
 #elif defined(ACCY_SOURCE) && ( ACCY_SOURCE == SECONDS_SINCE_T0 ) && defined(VARIO) && defined(GLIDER_RATIO_CALCULATED_AFTER_X_SEC)
    p_measurements[20] = &secFromT0 ; 
-   idToReply |= 0x20 ;
 #elif defined(ACCY_SOURCE) && ( ACCY_SOURCE == AVERAGE_VSPEED_SINCE_TO ) && defined(VARIO) && defined(GLIDER_RATIO_CALCULATED_AFTER_X_SEC)
    p_measurements[20] = &averageVspeedSinceT0 ; 
-   idToReply |= 0x20 ;
-#elif defined(ACCY_SOURCE) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) && ( ACCY_SOURCE == VOLT_1 || ACCY_SOURCE == VOLT_2 || ACCY_SOURCE == VOLT_3 || ACCY_SOURCE == VOLT_4 || ACCY_SOURCE == VOLT_5 || ACCY_SOURCE == VOLT_6 )
+#elif defined(ACCY_SOURCE) && defined(PIN_VOLTAGE) && ( ACCY_SOURCE == VOLT_1 || ACCY_SOURCE == VOLT_2 || ACCY_SOURCE == VOLT_3 || ACCY_SOURCE == VOLT_4 || ACCY_SOURCE == VOLT_5 || ACCY_SOURCE == VOLT_6 )
    p_measurements[20] = &oXs_Voltage.voltageData.mVolt[ACCY_SOURCE - VOLT_1] ;
-   idToReply |= 0x20 ;
-#elif defined(ACCY_SOURCE) && defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && ( ACCY_SOURCE == ADS_VOLT_1 || ACCY_SOURCE == ADS_VOLT_2 || ACCY_SOURCE == ADS_VOLT_3 || ACCY_SOURCE == ADS_VOLT_4 )
+#elif defined(ACCY_SOURCE) && defined(ADS_MEASURE) && ( ACCY_SOURCE == ADS_VOLT_1 || ACCY_SOURCE == ADS_VOLT_2 || ACCY_SOURCE == ADS_VOLT_3 || ACCY_SOURCE == ADS_VOLT_4 )
     p_measurements[20] =  &ads_Conv[ACCY_SOURCE - ADS_VOLT_1];
-    idToReply |= 0x20 ;
 #elif defined(ACCY_SOURCE) && ( ACCY_SOURCE == PITCH) && defined(USE_6050)
    p_measurements[20] = &pitch ; 
-   idToReply |= 0x20 ;
 #elif defined(ACCY_SOURCE) && ( ACCY_SOURCE == ROLL) && defined(USE_6050)
    p_measurements[20] = &roll ; 
-   idToReply |= 0x20 ;
 #elif defined(ACCY_SOURCE) && ( ACCY_SOURCE == YAW) && defined(USE_6050)
    p_measurements[20] = &yaw ; 
-   idToReply |= 0x20 ;
 #else
    p_measurements[20] = &no_data ; // accY
 #endif
@@ -506,37 +439,26 @@ void initMeasurement() {
 // pointer to accZ
 #if defined(ACCZ_SOURCE) && ( ACCZ_SOURCE == TEST_1)
    p_measurements[21] = &test1 ; // accZ
-   idToReply |= 0x20 ;
 #elif defined(ACCZ_SOURCE) && ( ACCZ_SOURCE == TEST_2)
    p_measurements[21] = &test2 ; // accZ
-   idToReply |= 0x20 ;
 #elif defined(ACCZ_SOURCE) && ( ACCZ_SOURCE == TEST_3)
    p_measurements[21] = &test3 ; // accZ
-   idToReply |= 0x20 ;
 #elif defined(ACCZ_SOURCE) && ( ACCZ_SOURCE == GLIDER_RATIO) && defined(GLIDER_RATIO_CALCULATED_AFTER_X_SEC)
    p_measurements[21] = &gliderRatio ; 
-   idToReply |= 0x20 ;
 #elif defined(ACCZ_SOURCE) && ( ACCZ_SOURCE == SECONDS_SINCE_T0 ) && defined(VARIO) && defined(GLIDER_RATIO_CALCULATED_AFTER_X_SEC)
    p_measurements[21] = &secFromT0 ; 
-   idToReply |= 0x20 ;
 #elif defined(ACCZ_SOURCE) && ( ACCZ_SOURCE == AVERAGE_VSPEED_SINCE_TO ) && defined(VARIO) && defined(GLIDER_RATIO_CALCULATED_AFTER_X_SEC)
    p_measurements[21] = &averageVspeedSinceT0 ; 
-   idToReply |= 0x20 ;
-#elif defined(ACCZ_SOURCE) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) && ( ACCZ_SOURCE == VOLT_1 || ACCZ_SOURCE == VOLT_2 || ACCZ_SOURCE == VOLT_3 || ACCZ_SOURCE == VOLT_4 || ACCZ_SOURCE == VOLT_5 || ACCZ_SOURCE == VOLT_6 )
+#elif defined(ACCZ_SOURCE) && defined(PIN_VOLTAGE) && ( ACCZ_SOURCE == VOLT_1 || ACCZ_SOURCE == VOLT_2 || ACCZ_SOURCE == VOLT_3 || ACCZ_SOURCE == VOLT_4 || ACCZ_SOURCE == VOLT_5 || ACCZ_SOURCE == VOLT_6 )
    p_measurements[21] = &oXs_Voltage.voltageData.mVolt[ACCZ_SOURCE - VOLT_1] ;
-   idToReply |= 0x20 ;
-#elif defined(ACCZ_SOURCE) && defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && ( ACCZ_SOURCE == ADS_VOLT_1 || ACCZ_SOURCE == ADS_VOLT_2 || ACCZ_SOURCE == ADS_VOLT_3 || ACCZ_SOURCE == ADS_VOLT_4 )
+#elif defined(ACCZ_SOURCE) && defined(ADS_MEASURE) && ( ACCZ_SOURCE == ADS_VOLT_1 || ACCZ_SOURCE == ADS_VOLT_2 || ACCZ_SOURCE == ADS_VOLT_3 || ACCZ_SOURCE == ADS_VOLT_4 )
     p_measurements[21] =  &ads_Conv[ACCZ_SOURCE - ADS_VOLT_1];
-    idToReply |= 0x20 ;
 #elif defined(ACCZ_SOURCE) && ( ACCZ_SOURCE == PITCH) && defined(USE_6050)
    p_measurements[21] = &pitch ; // accX
-   idToReply |= 0x20 ;
 #elif defined(ACCZ_SOURCE) && ( ACCZ_SOURCE == ROLL) && defined(USE_6050)
    p_measurements[21] = &roll ; // accX
-   idToReply |= 0x20 ;
 #elif defined(ACCZ_SOURCE) && ( ACCZ_SOURCE == YAW) && defined(USE_6050)
    p_measurements[21] = &yaw ; // accX
-   idToReply |= 0x20 ;
 #else
    p_measurements[21] = &no_data ; // accZ
 #endif
@@ -546,24 +468,17 @@ void initMeasurement() {
 
 void OXS_OUT::sendSportData()
 {  
-#ifdef DEBUG_STATE
-                  Serial.print("State "); Serial.print(state,HEX) ; Serial.print(" LastRx "); Serial.print(LastRx,HEX) ; Serial.print(" prevLastRx "); Serial.print(prevLastRx,HEX) ;
-                  Serial.print(" sensorIsr "); Serial.println(sensorIsr,HEX) ; 
-#endif
-                                                                          
                                                                           // first we calculate fields that are used only by SPORT
 #if defined(VFAS_SOURCE)
-  #if defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) &&  ( (VFAS_SOURCE == VOLT_1) || (VFAS_SOURCE == VOLT_2) || (VFAS_SOURCE == VOLT_3) || (VFAS_SOURCE == VOLT_4) || (VFAS_SOURCE == VOLT_5) || (VFAS_SOURCE == VOLT_6) )
+  #if defined(PIN_VOLTAGE) &&  ( (VFAS_SOURCE == VOLT_1) || (VFAS_SOURCE == VOLT_2) || (VFAS_SOURCE == VOLT_3) || (VFAS_SOURCE == VOLT_4) || (VFAS_SOURCE == VOLT_5) || (VFAS_SOURCE == VOLT_6) )
    if ( (!vfas.available) && ( oXs_Voltage.voltageData.mVolt[VFAS_SOURCE - VOLT_1].available) ){
       vfas.value = oXs_Voltage.voltageData.mVolt[VFAS_SOURCE - VOLT_1].value / 10 ;  // voltage in mv is divided by 10 because SPORT expect it (volt * 100) 
-      vfas.available = true ;
-      oXs_Voltage.voltageData.mVolt[VFAS_SOURCE - VOLT_1].available = false ; 
+      vfas.available = true ; 
    }
-  #elif defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && ( (VFAS_SOURCE == ADS_VOLT_1) || (VFAS_SOURCE == ADS_VOLT_2) || (VFAS_SOURCE == ADS_VOLT_3) || (VFAS_SOURCE == ADS_VOLT_4) )
+  #elif defined(ADS_MEASURE) && ( (VFAS_SOURCE == ADS_VOLT_1) || (VFAS_SOURCE == ADS_VOLT_2) || (VFAS_SOURCE == ADS_VOLT_3) || (VFAS_SOURCE == ADS_VOLT_4) )
    if ( (!vfas.available) && ( ads_Conv[VFAS_SOURCE - ADS_VOLT_1].available) ){
       vfas.value = ads_Conv[VFAS_SOURCE - ADS_VOLT_1].value / 10 ;  // voltage in mv is divided by 10 because SPORT expect it (volt * 100) 
       vfas.available = true ; 
-      ads_Conv[VFAS_SOURCE - ADS_VOLT_1].available = false;
    }
   #else
     #if  ( (VFAS_SOURCE == ADS_VOLT_1) || (VFAS_SOURCE == ADS_VOLT_2) || (VFAS_SOURCE == ADS_VOLT_3) || (VFAS_SOURCE == ADS_VOLT_4) )
@@ -576,16 +491,10 @@ void OXS_OUT::sendSportData()
   #endif
 #endif
 
-#if defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES)  
+#if defined(PIN_CURRENTSENSOR) 
     if ( oXs_Current.currentData.milliAmps.available) {
       oXs_Current.currentData.milliAmps.available = false ; 
       sport_currentData.value = oXs_Current.currentData.milliAmps.value  / 100 ;
-      sport_currentData.available = true ;
-    }  
-#elif defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && defined(ADS_CURRENT_BASED_ON)
-    if ( oXs_ads1115.adsCurrentData.milliAmps.available ) {
-      oXs_ads1115.adsCurrentData.milliAmps.available = false ;
-      sport_currentData.value = oXs_ads1115.adsCurrentData.milliAmps.value  / 100 ;
       sport_currentData.available = true ;
     }  
 #endif
@@ -651,10 +560,9 @@ void OXS_OUT::sendSportData()
                   p_measurements[currFieldIdx_]->available = 0 ;                                                         // mark the data as not available
                   dataValue[sensorSeq] =  p_measurements[currFieldIdx_]->value ;                                         // store the value in a buffer
                   dataId[sensorSeq] = fieldId[currFieldIdx_] ;                                                   // mark the data from this sensor as available
-                  uint8_t oReg = SREG ; // save status register
                   cli() ;
                   frskyStatus &= ~(1<< sensorSeq) ;                                               // says that data is loaded by resetting one bit
-                  SREG = oReg ; // restore the status register
+                  sei();
 #ifdef DEBUG_LOAD_SPORT
                   Serial.print("Load "); Serial.print(dataId[sensorSeq],HEX) ; Serial.print(" ") ; Serial.println(dataValue[sensorSeq]);
 #endif                  
@@ -754,38 +662,36 @@ void OXS_OUT::SendFrame1(){
 #endif
 
 // Cell_1_2
-#if defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) && defined(NUMBEROFCELLS) && (NUMBEROFCELLS > 0)      
+#if defined(PIN_VOLTAGE) && defined(NUMBEROFCELLS) && (NUMBEROFCELLS > 0)      
   SendCellVoltage( oXs_Voltage.voltageData.mVoltCell_1_2.value ); 
 #endif
 
 // Cell_3_4
-#if defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) && defined(NUMBEROFCELLS) && (NUMBEROFCELLS > 2)      
+#if defined(PIN_VOLTAGE) && defined(NUMBEROFCELLS) && (NUMBEROFCELLS > 2)      
   SendCellVoltage( oXs_Voltage.voltageData.mVoltCell_3_4.value) ; 
 #endif
 
 // Cell_5_6
-#if defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) && defined(NUMBEROFCELLS) && (NUMBEROFCELLS > 4)      
+#if defined(PIN_VOLTAGE) && defined(NUMBEROFCELLS) && (NUMBEROFCELLS > 4)      
    SendCellVoltage( oXs_Voltage.voltageData.mVoltCell_5_6.value) ; 
 #endif
 
 // vfas
-#if defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) && defined(VFAS_SOURCE) &&  ( (VFAS_SOURCE == VOLT_1) || (VFAS_SOURCE == VOLT_2) || (VFAS_SOURCE == VOLT_3) || (VFAS_SOURCE == VOLT_4) || (VFAS_SOURCE == VOLT_5) || (VFAS_SOURCE == VOLT_6) )
+#if defined(PIN_VOLTAGE) && defined(VFAS_SOURCE) &&  ( (VFAS_SOURCE == VOLT_1) || (VFAS_SOURCE == VOLT_2) || (VFAS_SOURCE == VOLT_3) || (VFAS_SOURCE == VOLT_4) || (VFAS_SOURCE == VOLT_5) || (VFAS_SOURCE == VOLT_6) )
     SendValue( FRSKY_USERDATA_VFAS_NEW ,  (int16_t) (voltageData->mVolt[VFAS_SOURCE - VOLT_1 ].value / 100) ) ; // convert mvolt in 1/10 of volt; in openTx 2.1.x, it is possible to get 1 more decimal using [VFAS_SOURCE - VOLT_1 ].value/10.)+2000);  
-#elif defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && defined(VFAS_SOURCE) &&  ( (VFAS_SOURCE == ADS_VOLT_1) || (VFAS_SOURCE == ADS_VOLT_2) || (VFAS_SOURCE == ADS_VOLT_3) || (VFAS_SOURCE == ADS_VOLT_4)  )
+#elif defined(ADS_MEASURE) && defined(VFAS_SOURCE) &&  ( (VFAS_SOURCE == ADS_VOLT_1) || (VFAS_SOURCE == ADS_VOLT_2) || (VFAS_SOURCE == ADS_VOLT_3) || (VFAS_SOURCE == ADS_VOLT_4)  )
     SendValue( FRSKY_USERDATA_VFAS_NEW ,  (int16_t) (ads_Conv[VFAS_SOURCE - ADS_VOLT_1 ].value / 100) ) ; // convert mvolt in 1/10 of volt; in openTx 2.1.x, it is possible to get 1 more decimal using [VFAS_SOURCE - VOLT_1 ].value/10.)+2000);  
 #endif
    
 // current
-#if defined(ARDUINO_MEASURES_A_CURRENT) && (ARDUINO_MEASURES_A_CURRENT == YES)
+#if defined(PIN_CURRENTSENSOR) 
     SendValue( FRSKY_USERDATA_CURRENT ,  (int16_t) ( oXs_Current.currentData.milliAmps.value / 100 ) ) ;
-#elif defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && defined(ADS_CURRENT_BASED_ON)
-    SendValue( FRSKY_USERDATA_CURRENT ,  (int16_t) ( oXs_ads1115.adsCurrentData.milliAmps.value / 100 ) ) ;
 #endif
 
 // fuel                                     
-#if defined(FUEL_SOURCE) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) && ( FUEL_SOURCE == VOLT_1 || FUEL_SOURCE == VOLT_2 || FUEL_SOURCE == VOLT_3 || FUEL_SOURCE == VOLT_4 || FUEL_SOURCE == VOLT_5 || FUEL_SOURCE == VOLT_6 )
+#if defined(FUEL_SOURCE) && defined(PIN_VOLTAGE) && ( FUEL_SOURCE == VOLT_1 || FUEL_SOURCE == VOLT_2 || FUEL_SOURCE == VOLT_3 || FUEL_SOURCE == VOLT_4 || FUEL_SOURCE == VOLT_5 || FUEL_SOURCE == VOLT_6 )
     SendValue(FRSKY_USERDATA_FUEL,  (int16_t)  voltageData->mVolt[FUEL_SOURCE - VOLT_1].value ) ;
-#elif defined(VFAS_SOURCE) && defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) && ( (FUEL_SOURCE == ADS_VOLT_1) || (FUEL_SOURCE == ADS_VOLT_2) || (FUEL_SOURCE == ADS_VOLT_3) || (FUEL_SOURCE == ADS_VOLT_4)  )
+#elif defined(VFAS_SOURCE) && defined(ADS_MEASURE) && ( (FUEL_SOURCE == ADS_VOLT_1) || (FUEL_SOURCE == ADS_VOLT_2) || (FUEL_SOURCE == ADS_VOLT_3) || (FUEL_SOURCE == ADS_VOLT_4)  )
     SendValue( FRSKY_USERDATA_FUEL ,  (int16_t) (ads_Conv[FUEL_SOURCE - ADS_VOLT_1 ].value ) ) ; 
 #endif
    
@@ -809,11 +715,11 @@ void OXS_OUT::SendFrame1(){
     SendValue( FRSKY_USERDATA_TEMP1 , (int16_t) averageVspeedSinceT0.value) ;     
 #elif defined(T1_SOURCE) && ( T1_SOURCE == SENSITIVITY) && defined(VARIO)
     SendValue( FRSKY_USERDATA_TEMP1 , (int16_t) oXs_MS5611.varioData.sensitivity.value) ; 
-#elif defined(T1_SOURCE) && ( T1_SOURCE == PPM) && ( defined(PIN_PPM) || ( defined(PPM_VIA_SPORT) && ( (PROTOCOL  == FRSKY_SPORT) || (PROTOCOL == FRSKY_SPORT_HUB) ) ) )
+#elif defined(T1_SOURCE) && ( T1_SOURCE == PPM) && defined(PIN_PPM)
     SendValue( FRSKY_USERDATA_TEMP1 , (int16_t) ppm.value) ; 
-#elif defined(T1_SOURCE) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) &&  ( (T1_SOURCE == VOLT_1) || (T1_SOURCE == VOLT_2) || (T1_SOURCE == VOLT_3) || (T1_SOURCE == VOLT_4) || (T1_SOURCE == VOLT_5) || (T1_SOURCE == VOLT_6) )
+#elif defined(T1_SOURCE) && defined(PIN_VOLTAGE) &&  ( (T1_SOURCE == VOLT_1) || (T1_SOURCE == VOLT_2) || (T1_SOURCE == VOLT_3) || (T1_SOURCE == VOLT_4) || (T1_SOURCE == VOLT_5) || (T1_SOURCE == VOLT_6) )
     SendValue( FRSKY_USERDATA_TEMP1 ,  (int16_t) (voltageData->mVolt[T1_SOURCE - VOLT_1 ].value ) ) ; 
-#elif defined(T1_SOURCE) && defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) &&  ( (T1_SOURCE == ADS_VOLT_1) || (T1_SOURCE == ADS_VOLT_2) || (T1_SOURCE == ADS_VOLT_3) || (T1_SOURCE == ADS_VOLT_4)  )
+#elif defined(T1_SOURCE) && defined(ADS_MEASURE) &&  ( (T1_SOURCE == ADS_VOLT_1) || (T1_SOURCE == ADS_VOLT_2) || (T1_SOURCE == ADS_VOLT_3) || (T1_SOURCE == ADS_VOLT_4)  )
     SendValue( FRSKY_USERDATA_TEMP1 ,  (int16_t) (ads_Conv[T1_SOURCE - ADS_VOLT_1 ].value ) ) ; 
 #endif
 
@@ -833,11 +739,11 @@ void OXS_OUT::SendFrame1(){
     SendValue( FRSKY_USERDATA_TEMP2 , (int16_t) averageVspeedSinceT0.value) ;     
 #elif defined(T2_SOURCE) && ( T2_SOURCE == SENSITIVITY) && defined(VARIO)
    SendValue( FRSKY_USERDATA_TEMP2 , (int16_t) oXs_MS5611.varioData.sensitivity.value) ; 
-#elif defined(T2_SOURCE) && ( T2_SOURCE == PPM) && ( defined(PIN_PPM) || ( defined(PPM_VIA_SPORT) && ( (PROTOCOL  == FRSKY_SPORT) || (PROTOCOL == FRSKY_SPORT_HUB) ) ) )
+#elif defined(T2_SOURCE) && ( T2_SOURCE == PPM) && defined(PIN_PPM)
     SendValue( FRSKY_USERDATA_TEMP2 , (int16_t) ppm.value) ; 
-#elif defined(T2_SOURCE) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) &&  ( (T2_SOURCE == VOLT_1) || (T2_SOURCE == VOLT_2) || (T2_SOURCE == VOLT_3) || (T2_SOURCE == VOLT_4) || (T2_SOURCE == VOLT_5) || (T2_SOURCE == VOLT_6) )
+#elif defined(T2_SOURCE) && defined(PIN_VOLTAGE) &&  ( (T2_SOURCE == VOLT_1) || (T2_SOURCE == VOLT_2) || (T2_SOURCE == VOLT_3) || (T2_SOURCE == VOLT_4) || (T2_SOURCE == VOLT_5) || (T2_SOURCE == VOLT_6) )
     SendValue( FRSKY_USERDATA_TEMP2 ,  (int16_t) (voltageData->mVolt[T2_SOURCE - VOLT_1 ].value ) ) ; 
-#elif defined(T2_SOURCE) && defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) &&  ( (T2_SOURCE == ADS_VOLT_1) || (T2_SOURCE == ADS_VOLT_2) || (T2_SOURCE == ADS_VOLT_3) || (T2_SOURCE == ADS_VOLT_4)  )
+#elif defined(T2_SOURCE) && defined(ADS_MEASURE) &&  ( (T2_SOURCE == ADS_VOLT_1) || (T2_SOURCE == ADS_VOLT_2) || (T2_SOURCE == ADS_VOLT_3) || (T2_SOURCE == ADS_VOLT_4)  )
     SendValue( FRSKY_USERDATA_TEMP2 ,  (int16_t) (ads_Conv[T2_SOURCE - ADS_VOLT_1 ].value ) ) ;     
 #endif
    
@@ -865,9 +771,9 @@ void OXS_OUT::SendFrame1(){
    SendValue( FRSKY_USERDATA_ACC_X , (int16_t) roll.value) ;
 #elif defined(ACCX_SOURCE) && ( ACCX_SOURCE == YAW) && defined(USE_6050)
    SendValue( FRSKY_USERDATA_ACC_X , (int16_t) yaw.value) ;        
-#elif defined(ACCX_SOURCE) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) &&  ( (ACCX_SOURCE == VOLT_1) || (ACCX_SOURCE == VOLT_2) || (ACCX_SOURCE == VOLT_3) || (ACCX_SOURCE == VOLT_4) || (ACCX_SOURCE == VOLT_5) || (ACCX_SOURCE == VOLT_6) )
+#elif defined(ACCX_SOURCE) && defined(PIN_VOLTAGE) &&  ( (ACCX_SOURCE == VOLT_1) || (ACCX_SOURCE == VOLT_2) || (ACCX_SOURCE == VOLT_3) || (ACCX_SOURCE == VOLT_4) || (ACCX_SOURCE == VOLT_5) || (ACCX_SOURCE == VOLT_6) )
     SendValue( FRSKY_USERDATA_ACC_X ,  (int16_t) (voltageData->mVolt[ACCX_SOURCE - VOLT_1 ].value ) ) ; 
-#elif defined(ACCX_SOURCE) && defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) &&  ( (ACCX_SOURCE == ADS_VOLT_1) || (ACCX_SOURCE == ADS_VOLT_2) || (ACCX_SOURCE == ADS_VOLT_3) || (ACCX_SOURCE == ADS_VOLT_4)  )
+#elif defined(ACCX_SOURCE) && defined(ADS_MEASURE) &&  ( (ACCX_SOURCE == ADS_VOLT_1) || (ACCX_SOURCE == ADS_VOLT_2) || (ACCX_SOURCE == ADS_VOLT_3) || (ACCX_SOURCE == ADS_VOLT_4)  )
     SendValue( FRSKY_USERDATA_ACC_X ,  (int16_t) (ads_Conv[ACCX_SOURCE - ADS_VOLT_1 ].value ) ) ; 
 #endif
 
@@ -890,9 +796,9 @@ void OXS_OUT::SendFrame1(){
    SendValue( FRSKY_USERDATA_ACC_Y , (int16_t) roll.value) ;
 #elif defined(ACCY_SOURCE) && ( ACCY_SOURCE == YAW) && defined(USE_6050)
    SendValue( FRSKY_USERDATA_ACC_Y , (int16_t) yaw.value) ;        
-#elif defined(ACCY_SOURCE) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) &&  ( (ACCY_SOURCE == VOLT_1) || (ACCY_SOURCE == VOLT_2) || (ACCY_SOURCE == VOLT_3) || (ACCY_SOURCE == VOLT_4) || (ACCY_SOURCE == VOLT_5) || (ACCY_SOURCE == VOLT_6) )
+#elif defined(ACCY_SOURCE) && defined(PIN_VOLTAGE) &&  ( (ACCY_SOURCE == VOLT_1) || (ACCY_SOURCE == VOLT_2) || (ACCY_SOURCE == VOLT_3) || (ACCY_SOURCE == VOLT_4) || (ACCY_SOURCE == VOLT_5) || (ACCY_SOURCE == VOLT_6) )
     SendValue( FRSKY_USERDATA_ACC_Y ,  (int16_t) (voltageData->mVolt[ACCY_SOURCE - VOLT_1 ].value ) ) ; 
-#elif defined(ACCY_SOURCE) && defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) &&  ( (ACCY_SOURCE == ADS_VOLT_1) || (ACCY_SOURCE == ADS_VOLT_2) || (ACCY_SOURCE == ADS_VOLT_3) || (ACCY_SOURCE == ADS_VOLT_4)  )
+#elif defined(ACCY_SOURCE) && defined(ADS_MEASURE) &&  ( (ACCY_SOURCE == ADS_VOLT_1) || (ACCY_SOURCE == ADS_VOLT_2) || (ACCY_SOURCE == ADS_VOLT_3) || (ACCY_SOURCE == ADS_VOLT_4)  )
     SendValue( FRSKY_USERDATA_ACC_Y ,  (int16_t) (ads_Conv[ACCY_SOURCE - ADS_VOLT_1 ].value ) ) ; 
 #endif
 
@@ -915,9 +821,9 @@ void OXS_OUT::SendFrame1(){
    SendValue( FRSKY_USERDATA_ACC_Z , (int16_t) roll.value) ;
 #elif defined(ACCZ_SOURCE) && ( ACCZ_SOURCE == YAW) && defined(USE_6050)
    SendValue( FRSKY_USERDATA_ACC_Z , (int16_t) yaw.value) ;        
-#elif defined(ACCZ_SOURCE) && defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) &&  ( (ACCZ_SOURCE == VOLT_1) || (ACCZ_SOURCE == VOLT_2) || (ACCZ_SOURCE == VOLT_3) || (ACCZ_SOURCE == VOLT_4) || (ACCZ_SOURCE == VOLT_5) || (ACCZ_SOURCE == VOLT_6) )
+#elif defined(ACCZ_SOURCE) && defined(PIN_VOLTAGE) &&  ( (ACCZ_SOURCE == VOLT_1) || (ACCZ_SOURCE == VOLT_2) || (ACCZ_SOURCE == VOLT_3) || (ACCZ_SOURCE == VOLT_4) || (ACCZ_SOURCE == VOLT_5) || (ACCZ_SOURCE == VOLT_6) )
     SendValue( FRSKY_USERDATA_ACC_Z ,  (int16_t) (voltageData->mVolt[ACCZ_SOURCE - VOLT_1 ].value ) ) ; 
-#elif defined(ACCZ_SOURCE) && defined(AN_ADS1115_IS_CONNECTED) && (AN_ADS1115_IS_CONNECTED == YES ) && defined(ADS_MEASURE) &&  ( (ACCZ_SOURCE == ADS_VOLT_1) || (ACCZ_SOURCE == ADS_VOLT_2) || (ACCZ_SOURCE == ADS_VOLT_3) || (ACCZ_SOURCE == ADS_VOLT_4)  )
+#elif defined(ACCZ_SOURCE) && defined(ADS_MEASURE) &&  ( (ACCZ_SOURCE == ADS_VOLT_1) || (ACCZ_SOURCE == ADS_VOLT_2) || (ACCZ_SOURCE == ADS_VOLT_3) || (ACCZ_SOURCE == ADS_VOLT_4)  )
     SendValue( FRSKY_USERDATA_ACC_Z ,  (int16_t) (ads_Conv[ACCZ_SOURCE - ADS_VOLT_1 ].value ) ) ; 
 #endif
 
@@ -1322,7 +1228,7 @@ void OXS_OUT::loadHubValueToSend( uint8_t currentFieldToSend ) {
 
 */
 
-#if defined(ARDUINO_MEASURES_VOLTAGES) && (ARDUINO_MEASURES_VOLTAGES == YES) && defined (NUMBEROFCELLS)  && (NUMBEROFCELLS > 0)
+#if defined(PIN_VOLTAGE) && defined (NUMBEROFCELLS)  && (NUMBEROFCELLS > 0)
 // ********************************************************** //
 // SendCellVoltage => send a cell voltage                     //
 // ********************************************************** //
@@ -1499,7 +1405,7 @@ uint8_t sensorId ;
 //! \brief  Timer1 interrupt service routine. *************** interrupt between 2 bits (handled by timer1)
 //
 //  Timer1 will ensure that bits are written and read at the correct instants in time.
-//  The state variable will ensure context switching between transmit and receive.
+//  The state variable will ensure context switching between transmit and recieve.
 //  If state should be something else, the variable is set to IDLE. IDLE is regarded as a safe state/mode.
 
 //For Frsky only
@@ -1534,8 +1440,8 @@ ISR(TIMER1_COMPA_vect)
 #endif
           if( SwUartTXBitCount < 8 )
           {
-            if( SwUartTXData & 0x01 ) // If the LSB of the TX buffer is 1:
-            {           
+            if( SwUartTXData & 0x01 )
+            {           // If the LSB of the TX buffer is 1:
               CLEAR_TX_PIN() ;                    // Send a logic 1 on the TX_PIN.
             }
             else
@@ -1625,10 +1531,6 @@ ISR(TIMER1_COMPA_vect)
 #ifdef DEBUGASERIAL
                         PORTC &= ~1 ;
 #endif
-#ifdef DEBUG_SPORT_RECEIVED
-                                sportRcvCount ++ ;
-#endif
-
                         if ( LastRx == 0x7E ) {
                             switch (SwUartRXData ) {
 
@@ -1638,8 +1540,6 @@ ISR(TIMER1_COMPA_vect)
 #define  GPS_ID          DATA_ID_GPS
 #define  RPM_ID          DATA_ID_RPM
 #define  ACC_ID          DATA_ID_ACC
-#define  TX_ID           DATA_ID_TX          // this ID is used when TX sent data to RX with a LUA script ; it requires that LUA script uses the same parameters 
-#define SENSOR_ISR_FOR_TX_ID 0XF0          // this value says that we already received a byte == TX_ID
 
                               case VARIO_ID :
                                 sensorIsr = 0 ; break ;
@@ -1650,17 +1550,16 @@ ISR(TIMER1_COMPA_vect)
                               case GPS_ID :
                                 sensorIsr = 3 ; break ;
                               case RPM_ID :
+#ifdef DEBUG_SPORT_RECEIVED
+                                sportRcvCount ++ ;
+#endif
                                 sensorIsr = 4 ; break ;
                               case ACC_ID :
                                 sensorIsr = 5 ; break ;
-                              case TX_ID :
-                                TxDataIdx = 0 ; // reset the counter used to register all bytes received from Tx
-                                sensorIsr = SENSOR_ISR_FOR_TX_ID ; break ;  // this value says that an ID related to a frame sent by Tx has been received; take care that it is perhaps just a pulling from RX without Tx frame. 
                               default : 
-                                sensorIsr = 128 ;  
+                                sensorIsr = 255 ;  
                             }
-                            if ( ( sensorIsr < 6 ) && ( idToReply & (1 << sensorIsr ) ) ) { // If this sensor ID is supported by oXs and it has been configured in order to send some data
-                              if  ( ( frskyStatus & ( 1 << sensorIsr ) ) == 0 )  {    // If this sensor ID is supported by oXs and oXs has prepared data to reply data in dataValue[] for this sensorSeq    
+                            if ( ( sensorIsr < 6 ) && ( ( frskyStatus & ( 1 << sensorIsr )) == 0 ) ) {    // If this sensor ID is supported by oXs and oXs has prepared data to reply data in dataValue[] for this sensorSeq    
                                      // if ( sportDataLock == 0 ) {
                                           TxSportData[0] = 0x10 ;
                                           TxSportData[1] = dataId[sensorIsr] << 4  ;
@@ -1669,51 +1568,23 @@ ISR(TIMER1_COMPA_vect)
                                           TxSportData[4] = dataValue[sensorIsr] >> 8 ;
                                           TxSportData[5] = dataValue[sensorIsr] >> 16 ;
                                           TxSportData[6] = dataValue[sensorIsr] >> 24 ;
-                              } else {
-                                          TxSportData[0] = 0x10 ;
-                                          TxSportData[1] = 0 ;
-                                          TxSportData[2] = 0 ;
-                                          TxSportData[3] = 0 ;
-                                          TxSportData[4] = 0 ;
-                                          TxSportData[5] = 0 ;
-                                          TxSportData[6] = 0 ;        
-                              }
                                           state = TxPENDING ;
                                           OCR1A += ( DELAY_400 - TICKS2WAITONESPORT) ;    // 400 uS gap before sending (remove 1 tick time because it was already added before
-                              
-                            } else if ( sensorIsr == SENSOR_ISR_FOR_TX_ID )  {       // we received an ID that could be used by TX to send data to the sensor; so we have to continue reading bytes
-                                  state = IDLE ;                      // Go back to idle
-                            } else  { // No data are loaded (so there is no data yet available or oXs does not have to reply to this ID)
+                                      //}
+                            } else  { // No data are loaded (so there is no data yet available)
                                   state = WAITING ;       // Wait for idle time
                                   OCR1A += DELAY_3500 ;   // 3.5mS gap before listening
                             } 
-                        }    // end receive 1 byte and previous was equal to 0x7E
-                        else if ( SwUartRXData == 0x7E) {      // reset sensorIsr when 0X7E is received (stop receiving data from Tx) and listen to next byte
-                            sensorIsr = 128 ;                  // reset sensorIsr when 0X7E is received (stop receiving data from Tx)
-                            rxStuff = 0;                       // and reset the stuff flag
-                            state =  IDLE ;                      // Go back to idle.
-                        } else if ((sensorIsr == SENSOR_ISR_FOR_TX_ID) && (TxDataIdx < 8) ){                  // we receive one byte that is not 0x7E. We check if it follow a sequence 0X7E and the Tx_ID which means it is sent by Tx to oXs
-                                                                                                              // Note: if all bytes have been received, then TxDataIdx = 8 and we do not store the data anymore; test on TxDataIdx = 8 is done in .ino file
-                            if (SwUartRXData == 0x7D)                 // byte stuffing indicator
-                              rxStuff = 1;                      // set the flag and discard byte
-                            else if (rxStuff == 0)
-                               TxData[TxDataIdx++] = SwUartRXData ;                         // we save the received byte in a buffer
-                            else {
-                               TxData[TxDataIdx++] = SwUartRXData | 0x20 ;                         // we save the received byte in a buffer taking into account the stuff bit 
-                               rxStuff = 0;                    // and reset the flag
-                            }                                                              
-                            state = IDLE ;                      // Go back to idle.
-                        } else { 
-                            state = IDLE ;                      // Go back to idle.
-                        }        // end of test on receiving one byte
-                        LastRx = SwUartRXData ;                 // save the current byte
-                        if (state == IDLE ) {                    // when Go back to idle.
+                        }    // received 1 byte and was equal to 0x7E
+                        else // So previous code is not equal to x7E 
+                        {
                             DISABLE_TIMER_INTERRUPT() ;         // Stop the timer interrupts.
-                            PCIFR = ( 1<<PCIF2 ) ;              // clear pending interrupt
-                            PCICR |= ( 1<<PCIE2 ) ;             // pin change interrupt enabled (so we can receive another byte)
+                            state = IDLE ;                                  // Go back to idle.
+                            PCIFR = ( 1<<PCIF2 ) ;        // clear pending interrupt
+                            PCICR |= ( 1<<PCIE2 ) ;       // pin change interrupt enabled
                         }
-                        
-                    } // End receiving  1 bit or 1 byte (8 bits)
+                        LastRx = SwUartRXData ;
+                     } // End receiving  1 bit or 1 byte (8 bits)
            }
            break ;
   
@@ -1836,7 +1707,7 @@ void initSportUart(  )           //*************** initialise UART pour SPORT
   // External interrupt
   
 #if PIN_SERIALTX == 4
-    PCMSK2 |= 0x10 ;                    // IO4 (PD4) on Arduini mini
+    PCMSK2 |= 0x10 ;      // IO4 (PD4) on Arduini mini
 #elif PIN_SERIALTX == 2
     PCMSK2 |= 0x04 ;                    // IO2 (PD2) on Arduini mini
 #else
@@ -1868,22 +1739,23 @@ void initSportUart(  )           //*************** initialise UART pour SPORT
 //  note  initSoftwareUart( void ) must be called in advance.
 //
 // This is the pin change interrupt for port D
-// This assumes it is the only pin change interrupt on port D
+// This assumes it is the only pin change interrupt
+// on this port
 //#ifdef FRSKY_SPORT
 ISR(PCINT2_vect)
 {
-  if ( TRXPIN & ( 1 << PIN_SERIALTX ) ) {     // if Pin is high = start bit (inverted)
+  if ( TRXPIN & ( 1 << PIN_SERIALTX ) ) {     // Pin is high = start bit (inverted)
     DISABLE_PIN_CHANGE_INTERRUPT()  ;     // pin change interrupt disabled
 //PORTC &= ~2 ;
     state = RECEIVE ;                 // Change state
-    DISABLE_TIMER_INTERRUPT() ;       // Disable timer to change its registers.
-    OCR1A = TCNT1 + TICKS2WAITONE_HALFSPORT - INTERRUPT_EXEC_CYCL - INTERRUPT_EARLY_BIAS ; // Count one and a half period into the future.
+            DISABLE_TIMER_INTERRUPT() ;       // Disable timer to change its registers.
+          OCR1A = TCNT1 + TICKS2WAITONE_HALFSPORT - INTERRUPT_EXEC_CYCL - INTERRUPT_EARLY_BIAS ; // Count one and a half period into the future.
 #ifdef DEBUGASERIAL
-  PORTC |= 1 ;
+          PORTC |= 1 ;
 #endif
-  SwUartRXBitCount = 0 ;            // Clear received bit counter.
-  CLEAR_TIMER_INTERRUPT() ;         // Clear interrupt bits
-  ENABLE_TIMER_INTERRUPT() ;        // Enable timer1 interrupt on again
+            SwUartRXBitCount = 0 ;            // Clear received bit counter.
+            CLEAR_TIMER_INTERRUPT() ;         // Clear interrupt bits
+            ENABLE_TIMER_INTERRUPT() ;        // Enable timer1 interrupt on again
   }
 //#ifdef PPM_INTERRUPT
 //  if ( EIFR & PPM_INT_BIT)  ppmInterrupted = 1 ;
@@ -1945,11 +1817,10 @@ void startHubTransmit()
     return ;
   }
   SET_TX_PIN() ;                    // Send a logic 0 on the TX_PIN (=start bit).
-  uint8_t oReg = SREG ; // save status register
   cli() ;
   OCR1A = TCNT1 + TICKS2WAITONEHUB  - INTERRUPT_ENTRY_TRANSMIT;   // Count one period into the future.
   CLEAR_TIMER_INTERRUPT() ;         // Clear interrupt bits
-  SREG = oReg ; // restore the status register
+  sei() ;
   SwUartTXBitCount = 0 ;
   SwUartTXData = hubData[0] ;
   //TxNotEmpty = 0 ;
